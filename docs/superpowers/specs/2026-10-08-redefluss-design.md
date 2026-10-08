@@ -84,6 +84,11 @@ Modelle sind per Umgebungsvariable einstellbar (`AI_MODEL`, `TRANSCRIBE_MODEL`, 
   → Azure (Region `germanywestcentral`, Referenztext, Granularität Phonem)
 - Anzeige: Gesamtpunkte (Genauigkeit, Flüssigkeit, Vollständigkeit), jedes Wort grün/gelb/rot, Antippen zeigt die
   schwachen Laute; Wörter unter 60 Punkten werden als Aussprache-Fehler gespeichert
+- **Nur das kostenlose Kontingent:** Azure-Ressource im Tarif **Free F0** (5 Audio-Stunden pro Monat, danach lehnt
+  Azure ab – kein Überlauf in Kosten). Zusätzlich zählt Redefluss die an Azure gesendeten Audio-Sekunden pro
+  Kalendermonat und stoppt bei **4,5 Stunden** (`AZURE_SECONDS_PER_MONTH`, Standard 16 200). Die App zeigt das
+  Restkontingent; ist es aufgebraucht (oder antwortet Azure mit Kontingent-Fehler), laufen alle anderen Modi weiter,
+  Aussprache-Prüfung und Aussprache-Teil der Wortschatz-Wiederholung sind bis zum Monatsersten ausgesetzt
 
 ### 3.4 Wortschatz täglich
 - Jeden Tag (beim ersten Öffnen) erzeugt der Coach 5–10 neue Wörter (Anzahl einstellbar) aus Omars Themen:
@@ -115,15 +120,17 @@ Modelle sind per Umgebungsvariable einstellbar (`AI_MODEL`, `TRANSCRIBE_MODEL`, 
 
 - Genau ein Konto aus `OWNER_EMAIL`/`OWNER_PASSWORD` (beim Start angelegt bzw. aktualisiert), Passwort in der App
   änderbar; JWT (HS256, 30 Tage, weil privat und PWA), bcrypt, Login-Drosselung wie Briefklar
-- Tageslimits als Kostenbremse (einstellbar): 300 Gesprächsrunden, 30 Live-Minuten, 200 Aussprache-Prüfungen,
+- Tageslimits als Kostenbremse (einstellbar): 300 Gesprächsrunden, 30 Live-Minuten, 100 Aussprache-Prüfungen,
   1 Wortschatz-Erzeugung; Überschreitung → 429 mit Hinweis
+- Monatslimit Azure: 16 200 Audio-Sekunden (siehe 3.3), gezählt vor dem Aufruf mit der tatsächlichen WAV-Länge
 
 Datenbank (eigene Rolle/DB `redefluss` auf dem vorhandenen Postgres des VPS, Port 5433, wie Briefklar), Flyway:
 - `app_user (id, email, password_hash, created_at)`
 - `mistake (id, category, wrong, right, rule, example, normalized, count, first_seen, last_seen, resolved)`
 - `vocab_card (id, word, article, plural, meaning, example, theme, source, ease, interval_days, reps, due_on, created_on)`
 - `practice_session (id, mode, started_at, minutes, summary)`
-- `usage_day (day, turns, live_seconds, pronunciations, vocab_generated)`
+- `usage_day (day, turns, live_seconds, pronunciations, azure_seconds, vocab_generated)` – Monatssumme von
+  `azure_seconds` ergibt das Azure-Kontingent
 
 ## 6. Oberfläche (Svelte 5, Runes, SvelteKit als SPA mit `adapter-static`)
 
@@ -159,9 +166,9 @@ ausgegeben (keine Schlüssel in Logs/Antworten). Logs enthalten keine Transkript
 - Caddy: `redefluss.omarfourati.de` mit `import access_log`, `/metrics` öffentlich 404, `request_body` 12 MB
 - Kennzahlen: `redefluss_turns_total{outcome}`, `redefluss_stage_duration_seconds{stage}` (transcribe/coach/voice/
   azure), `redefluss_live_seconds_total`, `redefluss_pronunciations_total{outcome}`, `redefluss_mistakes_total{category}`,
-  `redefluss_vocab_reviews_total{grade}`, `redefluss_logins_total{outcome}`
+  `redefluss_vocab_reviews_total{grade}`, `redefluss_logins_total{outcome}`, `redefluss_azure_seconds_month`
 - Monitoring-Repo: Job, Probe, Alarme (Kennzahlen weg, KI-Fehler gehäuft, Live-Minuten nahe Limit, Login-Drosselung),
-  Dashboard „Redefluss“
+  Azure-Kontingent über 80 %, Dashboard „Redefluss“
 - Voraussetzung vor dem ersten Deploy: DNS-A-Eintrag `redefluss` → `212.132.95.145`, kein AAAA-Eintrag
 
 ## 10. Etappen
