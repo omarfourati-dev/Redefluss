@@ -32,6 +32,9 @@ class OverviewRoutesTest {
             val mistakes = MistakeRepo(db)
             repeat(3) { mistakes.record(NewMistake("artikel", "den ganzen Zeit", "die ganze Zeit", "r", "e"), TEST_CLOCK.instant()) }
             mistakes.record(NewMistake("konjugation", "du muss", "du musst", "r", "e"), TEST_CLOCK.instant())
+            val vocab = de.omarfourati.redefluss.vocab.VocabRepo(db)
+            vocab.insertIfNew(de.omarfourati.redefluss.vocab.NewCard("Termin", "der", "die Termine", "m", "e", "alltag", "daily"), today)
+            vocab.insertIfNew(de.omarfourati.redefluss.vocab.NewCard("Frist", "die", "die Fristen", "m", "e", "it", "daily"), today.plusDays(1))
         }
         application { redefluss(deps) }
         val c = createClient { install(ContentNegotiation) { json() } }
@@ -43,6 +46,7 @@ class OverviewRoutesTest {
         assertEquals(9, o["minutesToday"]!!.jsonPrimitive.int)
         assertEquals(2, o["turnsToday"]!!.jsonPrimitive.int)
         assertEquals(8, o["turnsLeft"]!!.jsonPrimitive.int)
+        assertEquals(1, o["vocabDue"]!!.jsonPrimitive.int) // the card created tomorrow is not due yet
         val top = o["topMistakes"]!!.jsonArray
         assertEquals(listOf(3, 1), top.map { it.jsonObject["count"]!!.jsonPrimitive.int })
 

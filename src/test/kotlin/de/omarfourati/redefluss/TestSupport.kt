@@ -9,6 +9,7 @@ import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.overview.OverviewService
 import de.omarfourati.redefluss.speech.*
 import de.omarfourati.redefluss.metrics.Metrics
+import de.omarfourati.redefluss.vocab.*
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -32,11 +33,13 @@ fun testDeps(
     log: (String) -> Unit = {},
     clock: Clock = TEST_CLOCK,
     speech: Speech = Speech(FakeTranscriber(), FakeCoach(), FakeVoice()),
+    vocabAi: VocabAi = VocabAi(FakeVocabGenerator(), FakeVocabChecker()),
 ): Deps {
     val database = db ?: TestDb.db
     val users = UserRepo(database)
     val auth = AuthService(users, Tokens(config.jwtSecret, clock), LoginThrottle(clock), metrics, clock)
     return Deps(config = config, ping = ping, metrics = metrics, log = log, clock = clock, users = users, auth = auth,
-        conversation = ConversationService(SessionRepo(database), MistakeRepo(database), UsageRepo(database), speech, metrics, config, clock),
-        overview = OverviewService(UsageRepo(database), SessionRepo(database), MistakeRepo(database), config, clock))
+        conversation = ConversationService(SessionRepo(database), MistakeRepo(database), UsageRepo(database), VocabRepo(database), speech, metrics, config, clock),
+        overview = OverviewService(UsageRepo(database), SessionRepo(database), MistakeRepo(database), VocabRepo(database), config, clock),
+        vocab = VocabService(VocabRepo(database), MistakeRepo(database), UsageRepo(database), vocabAi, speech, metrics, config, clock))
 }

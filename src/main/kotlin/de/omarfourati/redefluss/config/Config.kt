@@ -18,6 +18,8 @@ data class Config(
     val ttsModel: String,
     val ttsVoice: String,
     val turnsPerDay: Int,
+    val vocabPerDay: Int,
+    val vocabReviewsPerDay: Int,
 ) {
     companion object {
         fun from(env: Map<String, String>): Config {
@@ -49,6 +51,8 @@ data class Config(
                 ttsModel = opt("TTS_MODEL") ?: "gpt-4o-mini-tts",
                 ttsVoice = opt("TTS_VOICE") ?: "coral",
                 turnsPerDay = int("TURNS_PER_DAY", 300),
+                vocabPerDay = int("VOCAB_PER_DAY", 7).coerceIn(5, 10),
+                vocabReviewsPerDay = int("VOCAB_REVIEWS_PER_DAY", 60),
             )
         }
     }

@@ -166,6 +166,30 @@ class ConversationRoutesTest {
         assertFalse(lines.any { "geheimer" in it }, lines.joinToString("\n"))
     }
 
+    private class WordChoiceCoach : Coach {
+        override suspend fun respond(input: CoachInput) = CoachReply(listOf(
+            Correction("machen", "treffen", "Eine Entscheidung trifft man.", "wortwahl"),
+            Correction("eine sehr lange falsche Wendung", "eine viel zu lange richtige Wendung hier", "zu lang", "wortwahl"),
+            Correction("den ganzen Zeit", "die ganze Zeit", "Zeit ist feminin.", "artikel"),
+        ), "Ich muss eine Entscheidung treffen.", "Welche Entscheidung?")
+    }
+
+    @Test fun wordChoiceMistakesBecomeVocabCards() = testApplication {
+        application { redefluss(setup(coach = WordChoiceCoach())) }
+        val (c, token, id) = session()
+        assertEquals(HttpStatusCode.OK, c.turn(token, id, text = "Ich muss eine Entscheidung machen.").status)
+        val due = c.get("/api/vocab/due") { bearerAuth(token) }.body<JsonArray>().map { it.jsonObject }
+        val card = due.single()
+        assertEquals("treffen", card["word"]!!.jsonPrimitive.content)
+        assertEquals("mistake", card["source"]!!.jsonPrimitive.content)
+        assertEquals("Eine Entscheidung trifft man.", card["meaning"]!!.jsonPrimitive.content)
+        assertEquals("Ich muss eine Entscheidung treffen.", card["example"]!!.jsonPrimitive.content)
+        assertEquals("alltag", card["theme"]!!.jsonPrimitive.content)
+        // the same mistake again does not duplicate the card
+        c.turn(token, id, text = "Ich muss eine Entscheidung machen.")
+        assertEquals(1, c.get("/api/vocab/due") { bearerAuth(token) }.body<JsonArray>().size)
+    }
+
     @Test fun requiresLogin() = testApplication {
         application { redefluss(setup()) }
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/sessions").status)

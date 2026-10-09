@@ -18,6 +18,8 @@ class ConfigTest {
         assertEquals("gpt-4o-mini-tts", c.ttsModel)
         assertEquals("coral", c.ttsVoice)
         assertEquals(300, c.turnsPerDay)
+        assertEquals(7, c.vocabPerDay)
+        assertEquals(60, c.vocabReviewsPerDay)
         assertNull(c.ownerEmail)
         assertFalse(c.ownerResetPassword)
     }
@@ -47,5 +49,12 @@ class ConfigTest {
 
     @Test fun invalidNumberIsRejected() {
         assertFailsWith<ConfigException> { Config.from(base + ("TURNS_PER_DAY" to "viele")) }
+    }
+
+    @Test fun vocabPerDayIsClamped() {
+        assertEquals(10, Config.from(base + ("VOCAB_PER_DAY" to "20")).vocabPerDay)
+        assertEquals(5, Config.from(base + ("VOCAB_PER_DAY" to "2")).vocabPerDay)
+        assertEquals(8, Config.from(base + ("VOCAB_PER_DAY" to "8")).vocabPerDay)
+        assertEquals(12, Config.from(base + ("VOCAB_REVIEWS_PER_DAY" to "12")).vocabReviewsPerDay)
     }
 }

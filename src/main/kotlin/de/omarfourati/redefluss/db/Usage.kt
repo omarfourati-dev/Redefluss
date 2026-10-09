@@ -43,4 +43,12 @@ class UsageRepo(private val db: Db) {
             """.trimIndent(), day, limit) { it.next() }
         }
     }
+
+    /** Gives the day's generation back after a failed generation, so the next request can try again. */
+    suspend fun undoVocabGeneration(day: LocalDate) {
+        db.tx { update("UPDATE usage_day SET vocab_generated = 0 WHERE day = ?", day) }
+    }
+
+    suspend fun vocabReviewsOn(day: LocalDate): Int =
+        db.tx { sql("SELECT vocab_reviews FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
 }

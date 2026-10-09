@@ -11,5 +11,13 @@ class Metrics(val registry: PrometheusMeterRegistry = PrometheusMeterRegistry(Pr
         registry.timer("redefluss.stage.duration", "stage", stage).record(Duration.ofMillis(millis))
     fun mistake(category: String) = registry.counter("redefluss.mistakes", "category", category).increment()
     fun login(outcome: String) = registry.counter("redefluss.logins", "outcome", outcome).increment()
+    fun vocabReview(grade: Int) = registry.counter("redefluss.vocab.reviews", "grade", grade.toString()).increment()
+    fun vocabGenerated(n: Int) = registry.counter("redefluss.vocab.generated").increment(n.toDouble())
+
+    /** Runs block and records its duration as redefluss.stage.duration{stage}. */
+    suspend fun <T> timed(stage: String, block: suspend () -> T): T {
+        val start = System.nanoTime()
+        try { return block() } finally { stage(stage, (System.nanoTime() - start) / 1_000_000) }
+    }
     fun scrape(): String = registry.scrape()
 }
