@@ -14,7 +14,7 @@ class Metrics(val registry: PrometheusMeterRegistry = PrometheusMeterRegistry(Pr
     fun login(outcome: String) = registry.counter("redefluss.logins", "outcome", outcome).increment()
     fun vocabReview(grade: Int) = registry.counter("redefluss.vocab.reviews", "grade", grade.toString()).increment()
     fun vocabGenerated(n: Int) = registry.counter("redefluss.vocab.generated").increment(n.toDouble())
-    /** outcome: ok, quota, limit, upstream_error, timeout, bad_audio. */
+    /** outcome: ok, quota, limit, upstream_error, timeout, bad_audio, no_speech. */
     fun pronunciation(outcome: String) = registry.counter("redefluss.pronunciations", "outcome", outcome).increment()
 
     private val azureSeconds = registry.gauge("redefluss.azure.seconds.month", AtomicInteger(0))!!

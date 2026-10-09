@@ -75,6 +75,14 @@ class ConfigTest {
         assertEquals(0, c.pronunciationsPerDay)
     }
 
+    @Test fun toStringMasksSecrets() {
+        val c = Config.from(base + mapOf("JWT_SECRET" to "jwt-geheim-".repeat(4), "DB_PASSWORD" to "db-geheim-pw", "OPENAI_API_KEY" to "sk-geheim-openai",
+            "AZURE_SPEECH_KEY" to "azure-geheim-key", "OWNER_PASSWORD" to "owner-geheim-pw", "OWNER_EMAIL" to "o@example.de", "SPEECH" to "openai"))
+        val s = c.toString()
+        listOf("jwt-geheim-", "db-geheim-pw", "sk-geheim-openai", "azure-geheim-key", "owner-geheim-pw").forEach { assertFalse(it in s, it) }
+        assertTrue("***" in s)
+    }
+
     @Test fun vocabPerDayIsClamped() {
         assertEquals(10, Config.from(base + ("VOCAB_PER_DAY" to "20")).vocabPerDay)
         assertEquals(5, Config.from(base + ("VOCAB_PER_DAY" to "2")).vocabPerDay)

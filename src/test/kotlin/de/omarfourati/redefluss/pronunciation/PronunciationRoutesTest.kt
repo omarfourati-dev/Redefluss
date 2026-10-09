@@ -39,8 +39,9 @@ class PronunciationRoutesTest {
     /** Throws the given exception (or delegates to FakeScorer) and counts calls. */
     private class SpyScorer(private val fail: Exception? = null) : PronunciationScorer {
         val calls = AtomicInteger()
+        @Volatile var lastSize = -1
         override suspend fun assess(wav: ByteArray, reference: String): Assessment {
-            calls.incrementAndGet()
+            calls.incrementAndGet(); lastSize = wav.size
             fail?.let { throw it }
             return FakeScorer().assess(wav, reference)
         }
@@ -237,6 +238,20 @@ class PronunciationRoutesTest {
         assertTrue("redefluss_pronunciations_total{outcome=\"bad_audio\"} 5.0" in deps.metrics.scrape())
     }
 
+    @Test fun scorerGetsOnlyHeaderPlusCountedSamples() = testApplication {
+        val scorer = SpyScorer()
+        application { redefluss(setup(scorer = scorer)) }
+        val (c, token) = login()
+        val full = seconds(2.0)
+        val at = String(full, Charsets.ISO_8859_1).indexOf("data")
+        val headerEnd = at + 8
+        val declared = 16000 * 2 // 1 s declared, 2 s follow
+        java.nio.ByteBuffer.wrap(full).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(at + 4, declared)
+        assertEquals(HttpStatusCode.OK, c.assess(token, audio = full).status)
+        assertEquals(headerEnd + declared, scorer.lastSize)
+        assertEquals(1, UsageRepo(TestDb.db).azureSecondsBetween(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1)))
+    }
+
     @Test fun monthCapIs429() = testApplication {
         val deps = setup(env = mapOf("AZURE_SECONDS_PER_MONTH" to "10"))
         application { redefluss(deps) }
@@ -279,6 +294,14 @@ class PronunciationRoutesTest {
         assertEquals("Ich habe nichts verstanden – bitte noch einmal.", res.detail())
         assertEquals(2, UsageRepo(TestDb.db).azureSecondsBetween(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1))) // ceil(1.2)
         assertEquals(1, UsageRepo(TestDb.db).pronunciationsOn(LocalDate.now(TEST_CLOCK)))
+    }
+
+    @Test fun nothingRecognizedCountsAsNoSpeechMetric() = testApplication {
+        val deps = setup(scorer = SpyScorer(NothingRecognizedException()))
+        application { redefluss(deps) }
+        val (c, token) = login()
+        assertEquals(HttpStatusCode.UnprocessableEntity, c.assess(token).status)
+        assertTrue("redefluss_pronunciations_total{outcome=\"no_speech\"} 1.0" in deps.metrics.scrape())
     }
 
     @Test fun azureQuotaIs429WithBusyText() = testApplication {

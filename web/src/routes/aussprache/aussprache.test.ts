@@ -209,7 +209,7 @@ describe('Aussprache', () => {
 
   it('shows the monthly quota 429 as alert and keeps the recorder', async () => {
     const MONTH = 'Das kostenlose Aussprache-Kontingent für diesen Monat ist aufgebraucht – ab dem 1. geht es weiter.';
-    mockApi({ '/api/pronunciation/exercises': () => json(200, exercises),
+    mockApi({ '/api/pronunciation/exercises': () => json(200, exercises), '/api/pronunciation/quota': () => json(200, quota),
       '/api/pronunciation/assess': () => json(429, { type: 'about:blank', title: 'Too Many Requests', status: 429, detail: MONTH }) });
     render(Page);
     await screen.findByRole('button', { name: /Halten und sprechen/ });
@@ -217,6 +217,26 @@ describe('Aussprache', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(MONTH);
     expect(screen.queryByText('Gesamt')).toBeNull();
     await vi.waitFor(() => expect(screen.getByRole('button', { name: /Halten und sprechen/ })).not.toBeDisabled());
+  });
+
+  it('a 429 reloads the quota; an empty quota disables the talk button with an explanation', async () => {
+    const MONTH = 'Das kostenlose Aussprache-Kontingent für diesen Monat ist aufgebraucht – ab dem 1. geht es weiter.';
+    mockApi({ '/api/pronunciation/exercises': () => json(200, exercises),
+      '/api/pronunciation/quota': () => json(200, { ...quota, secondsLeft: 0 }),
+      '/api/pronunciation/assess': () => json(429, { type: 'about:blank', title: 'Too Many Requests', status: 429, detail: MONTH }) });
+    render(Page);
+    await screen.findByRole('button', { name: /Halten und sprechen/ });
+    await record();
+    await vi.waitFor(() => expect(calls('/api/pronunciation/quota')).toHaveLength(1));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: /Halten und sprechen/ })).toBeDisabled());
+    expect(screen.getByText(/für diesen Monat ist aufgebraucht/, { selector: 'p.text-center' })).toBeInTheDocument();
+  });
+
+  it('disables the talk button when no attempts are left today', async () => {
+    mockApi({ '/api/pronunciation/exercises': () => json(200, { ...exercises, quota: { ...quota, todayLeft: 0 } }) });
+    render(Page);
+    expect(await screen.findByRole('button', { name: /Halten und sprechen/ })).toBeDisabled();
+    expect(screen.getByText(/Tageslimit ist erreicht/)).toBeInTheDocument();
   });
 
   it('a failed WAV conversion is shown as alert without calling the API', async () => {

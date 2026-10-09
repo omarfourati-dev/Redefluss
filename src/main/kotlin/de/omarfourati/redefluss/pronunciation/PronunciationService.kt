@@ -104,7 +104,10 @@ class PronunciationService(
         val scorer = requireEnabled()
         val text = reference(rawText)
         if (audio == null) throw badRequest("Bitte nimm den Satz auf.")
-        val seconds = clipSeconds(audio.bytes)
+        val wav = checkedWav(audio.bytes)
+        val seconds = ceil(wav.seconds).toInt()
+        // Exactly the counted audio: header plus the declared samples, nothing trailing.
+        val counted = audio.bytes.copyOfRange(0, wav.dataOffset + wav.dataBytes)
 
         val today = today()
         val monthStart = today.withDayOfMonth(1)
@@ -115,8 +118,9 @@ class PronunciationService(
         }
 
         val assessment = try {
-            metrics.timed("pronunciation") { scorer.assess(audio.bytes, text) }
+            metrics.timed("pronunciation") { scorer.assess(counted, text) }
         } catch (e: NothingRecognizedException) {
+            metrics.pronunciation("no_speech")
             throw ApiException(HttpStatusCode.UnprocessableEntity, "Unprocessable Content", "Ich habe nichts verstanden – bitte noch einmal.")
         } catch (e: QuotaExceededException) {
             metrics.pronunciation("quota")
@@ -137,7 +141,7 @@ class PronunciationService(
     }
 
     /** Validates the format first (so hostile header values never reach the duration maths), then the duration; whole seconds, rounded up. */
-    private fun clipSeconds(bytes: ByteArray): Int {
+    private fun checkedWav(bytes: ByteArray): WavInfo {
         val wav = WavInfo.parse(bytes)
         if (wav == null || wav.sampleRate != 16000 || wav.channels != 1 || wav.bitsPerSample != 16) {
             metrics.pronunciation("bad_audio")
@@ -148,7 +152,7 @@ class PronunciationService(
             metrics.pronunciation("bad_audio")
             throw badRequest("Die Aufnahme muss 0,5 bis 30 Sekunden lang sein.")
         }
-        return ceil(seconds).toInt()
+        return wav
     }
 
     private fun reference(raw: String?): String {

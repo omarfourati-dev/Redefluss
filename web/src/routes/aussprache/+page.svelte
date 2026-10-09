@@ -40,6 +40,10 @@
     maxMs: MAX_RECORDING_MS
   });
   const locked = $derived(busy || talk.recording);
+  const exhausted = $derived(quota !== null && (quota.secondsLeft === 0 || quota.todayLeft === 0));
+  const exhaustedText = $derived(quota?.secondsLeft === 0
+    ? 'Das kostenlose Kontingent für diesen Monat ist aufgebraucht – ab dem 1. geht es weiter.'
+    : 'Das Tageslimit ist erreicht – morgen geht es weiter.');
 
   function preselect(d: Exercises): Exercise | null {
     const all = [...d.groups.mistakes, ...d.groups.vocab, ...d.groups.sounds];
@@ -109,10 +113,21 @@
       quota = res.quota;
       if (selected?.id === ex.id) result = res;
     } catch (e) {
-      if (alive) error = (e as Error).message;
+      if (alive) {
+        error = (e as Error).message;
+        if (e instanceof ApiError && e.status === 429) await refreshQuota();
+      }
     } finally {
       busy = false;
     }
+  }
+
+  /** After a 429 the quota line may be stale; a failing reload keeps the old value. */
+  async function refreshQuota() {
+    try {
+      const q = await api<Quota>('/api/pronunciation/quota');
+      if (alive) quota = q;
+    } catch { /* keep the old line */ }
   }
 
   function press() {
@@ -154,8 +169,9 @@
       </div>
     {:else}
       <div class="mt-4 flex justify-center">
-        <TalkButton disabled={busy || speaking || player.playing} recording={talk.recording} seconds={talk.seconds} onPress={press} onRelease={talk.release} />
+        <TalkButton disabled={busy || speaking || player.playing || exhausted} recording={talk.recording} seconds={talk.seconds} onPress={press} onRelease={talk.release} />
       </div>
+      {#if exhausted}<p class="mt-2 text-center text-sm text-slate-500">{exhaustedText}</p>{/if}
     {/if}
   {/if}
 

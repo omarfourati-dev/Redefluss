@@ -3,7 +3,7 @@ package de.omarfourati.redefluss.pronunciation
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-data class WavInfo(val sampleRate: Int, val channels: Int, val bitsPerSample: Int, val dataBytes: Int) {
+data class WavInfo(val sampleRate: Int, val channels: Int, val bitsPerSample: Int, val dataBytes: Int, val dataOffset: Int = 0) {
     val seconds: Double get() = dataBytes / (sampleRate * channels * bitsPerSample / 8.0)
 
     companion object {
@@ -31,7 +31,7 @@ data class WavInfo(val sampleRate: Int, val channels: Int, val bitsPerSample: In
                     "data" -> {
                         if (!haveFmt || rate <= 0 || channels <= 0 || bits <= 0) return null
                         // Streamed recordings may declare 0 or 0xFFFFFFFF: never trust more than what is actually there.
-                        return WavInfo(rate, channels, bits, minOf(size, (bytes.size - body).toLong()).toInt())
+                        return WavInfo(rate, channels, bits, minOf(size, (bytes.size - body).toLong()).toInt(), body)
                     }
                 }
                 val next = body + size + (size and 1L)

@@ -26,6 +26,11 @@ data class Config(
     val azureSecondsPerMonth: Int,
     val pronunciationsPerDay: Int,
 ) {
+    /** The generated data-class text would print every secret; mask them. */
+    override fun toString(): String = "Config(port=$port, databaseUrl=$databaseUrl, dbUser=$dbUser, dbPassword=***, jwtSecret=***, " +
+        "ownerEmail=$ownerEmail, ownerPassword=${ownerPassword?.let { "***" }}, speech=$speech, openAiKey=${openAiKey?.let { "***" }}, " +
+        "pronunciation=$pronunciation, azureKey=${azureKey?.let { "***" }}, azureRegion=$azureRegion)"
+
     companion object {
         fun from(env: Map<String, String>): Config {
             fun opt(name: String) = env[name]?.trim()?.takeIf { it.isNotEmpty() }

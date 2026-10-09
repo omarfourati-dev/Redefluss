@@ -68,6 +68,7 @@ Fehler-Gedächtnis. Aufnahmen werden nie gespeichert.
   deterministischen Fake-Bewerter: Wörter mit ü, ö oder ch gelten als schwach. Im Betrieb gilt `PRONUNCIATION=azure` mit
   `AZURE_SPEECH_KEY` und `AZURE_SPEECH_REGION` (Standard `germanywestcentral`); fehlt der Schlüssel, startet die App
   trotzdem und die Seite zeigt „Aussprache ist noch nicht eingerichtet.“
+- **Azure-Zähler:** Der F0-Zähler von Azure kann sich nach UTC-Monat zurücksetzen; ist er zu Ende, lehnt Azure einfach ab (Hinweis „ausgelastet“, HTTP 429) – es entstehen keine Kosten.
 
 ## Kotlin-/Ktor-Konzepte im Projekt
 
