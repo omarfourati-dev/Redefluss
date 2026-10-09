@@ -17,6 +17,11 @@ class Metrics(val registry: PrometheusMeterRegistry = PrometheusMeterRegistry(Pr
     /** outcome: ok, quota, limit, upstream_error, timeout, bad_audio, no_speech. */
     fun pronunciation(outcome: String) = registry.counter("redefluss.pronunciations", "outcome", outcome).increment()
 
+    /** outcome: started, limit, upstream_error, reported. */
+    fun liveSession(outcome: String) = registry.counter("redefluss.live.sessions", "outcome", outcome).increment()
+    /** Settled (actually used) live seconds. */
+    fun liveSeconds(seconds: Int) = registry.counter("redefluss.live.seconds").increment(seconds.toDouble())
+
     private val azureSeconds = registry.gauge("redefluss.azure.seconds.month", AtomicInteger(0))!!
     /** Azure seconds used in the current month (alert at 80 % of the cap). */
     fun azureSecondsMonth(seconds: Int) = azureSeconds.set(seconds)

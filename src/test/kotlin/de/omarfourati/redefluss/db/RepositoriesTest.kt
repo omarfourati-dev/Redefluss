@@ -113,4 +113,36 @@ class RepositoriesTest {
         assertEquals(3, results.count { it == AzureCount.OK })
         assertEquals(18, usage.azureSecondsBetween(oct, oct.plusMonths(1)))
     }
+    @Test fun liveBudgetReserveAndSettle() = runBlocking {
+        val usage = UsageRepo(db)
+        val day = LocalDate.of(2026, 10, 9)
+        assertEquals(0, usage.liveSecondsOn(day))
+        assertFalse(usage.tryReserveLive(day, 2400, 1800))   // larger than the whole budget, even on a fresh day
+        assertEquals(0, usage.liveSecondsOn(day))
+        assertTrue(usage.tryReserveLive(day, 1200, 1800))
+        assertFalse(usage.tryReserveLive(day, 900, 1800))
+        assertTrue(usage.tryReserveLive(day, 600, 1800))    // exactly at the cap
+        assertEquals(1800, usage.liveSecondsOn(day))
+        assertFalse(usage.tryReserveLive(day.plusDays(1), 600, 0))
+        usage.settleLive(day, 500)
+        assertEquals(1300, usage.liveSecondsOn(day))
+        usage.settleLive(day, 5000)                          // never below zero
+        assertEquals(0, usage.liveSecondsOn(day))
+        usage.settleLive(day.plusDays(5), 100)               // no row: nothing happens
+        assertEquals(0, usage.liveSecondsOn(day.plusDays(5)))
+        // live seconds make a day active for the streak
+        usage.tryReserveLive(day.plusDays(2), 600, 1800)
+        assertTrue(day.plusDays(2) in usage.activeDaysSince(day))
+    }
+
+    @Test fun liveReserveIsAtomicUnderParallelCalls() = runBlocking {
+        val usage = UsageRepo(db)
+        val day = LocalDate.of(2026, 10, 10)
+        repeat(5) { round ->
+            val d = day.plusDays(round.toLong())
+            val results = coroutineScope { List(2) { async(Dispatchers.IO) { usage.tryReserveLive(d, 900, 1200) } }.awaitAll() }
+            assertEquals(1, results.count { it }, "round $round")
+            assertEquals(900, usage.liveSecondsOn(d))
+        }
+    }
 }

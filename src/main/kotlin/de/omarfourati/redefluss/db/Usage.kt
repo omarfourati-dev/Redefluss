@@ -77,6 +77,31 @@ class UsageRepo(private val db: Db) {
         sql("SELECT COALESCE(SUM(azure_seconds), 0) FROM usage_day WHERE day >= ? AND day < ?", from, toExclusive) { rs -> rs.next(); rs.getInt(1) }
     }
 
+    /**
+     * Reserves [seconds] of the day's live budget if they still fit – one atomic upsert, so parallel starts cannot overshoot.
+     * A reservation larger than the whole budget is refused up front (the plain INSERT would not check it).
+     */
+    suspend fun tryReserveLive(day: LocalDate, seconds: Int, limitSeconds: Int): Boolean {
+        if (seconds <= 0 || seconds > limitSeconds) return false
+        return db.tx {
+            sql("""
+                INSERT INTO usage_day (day, live_seconds) VALUES (?, ?)
+                ON CONFLICT (day) DO UPDATE SET live_seconds = usage_day.live_seconds + EXCLUDED.live_seconds
+                  WHERE usage_day.live_seconds + EXCLUDED.live_seconds <= ?
+                RETURNING live_seconds
+            """.trimIndent(), day, seconds, limitSeconds) { it.next() }
+        }
+    }
+
+    /** Gives [refundSeconds] of a reservation back; never below zero. */
+    suspend fun settleLive(day: LocalDate, refundSeconds: Int) {
+        if (refundSeconds <= 0) return
+        db.tx { update("UPDATE usage_day SET live_seconds = GREATEST(0, live_seconds - ?) WHERE day = ?", refundSeconds, day) }
+    }
+
+    suspend fun liveSecondsOn(day: LocalDate): Int =
+        db.tx { sql("SELECT live_seconds FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
+
     suspend fun pronunciationsOn(day: LocalDate): Int =
         db.tx { sql("SELECT pronunciations FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
 }

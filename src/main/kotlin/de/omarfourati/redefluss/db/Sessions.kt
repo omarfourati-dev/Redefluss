@@ -16,6 +16,13 @@ class SessionRepo(private val db: Db) {
         update("UPDATE practice_session SET turns = turns + 1, mistakes = mistakes + ?, last_at = ? WHERE id = ?", mistakes, now, id) == 1
     }
 
+    suspend fun mode(id: UUID): String? = db.tx { sql("SELECT mode FROM practice_session WHERE id = ?", id) { if (it.next()) it.getString(1) else null } }
+
+    /** Marks a session as cancelled unless it already has a summary (a report or an earlier cancel). */
+    suspend fun markCancelled(id: UUID): Boolean = db.tx {
+        update("UPDATE practice_session SET summary = 'abgebrochen' WHERE id = ? AND summary = ''", id) == 1
+    }
+
     suspend fun topic(id: UUID): String = db.tx { sql("SELECT topic FROM practice_session WHERE id = ?", id) { if (it.next()) it.getString(1) else "" } }
 
     /** Practice minutes of sessions started in [from, to): each session with at least one turn counts ≥ 1 minute. */

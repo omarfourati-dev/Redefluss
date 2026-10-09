@@ -45,7 +45,8 @@ class ServerTest {
         assertEquals("no-referrer", h["Referrer-Policy"])
         assertEquals("microphone=(self), camera=(), geolocation=()", h["Permissions-Policy"])
         val csp = h["Content-Security-Policy"]!!
-        for (part in listOf("default-src 'self'", "media-src 'self' blob: data:", "frame-ancestors 'none'", "script-src 'self'")) {
+        for (part in listOf("default-src 'self'", "media-src 'self' blob: data:", "frame-ancestors 'none'", "script-src 'self'",
+            "connect-src 'self' https://api.openai.com;")) {
             assertTrue(part in csp, "CSP misses $part: $csp")
         }
     }

@@ -25,6 +25,9 @@ data class Config(
     val azureRegion: String,
     val azureSecondsPerMonth: Int,
     val pronunciationsPerDay: Int,
+    val liveMinutesPerDay: Int,
+    val realtimeModel: String,
+    val realtimeVoice: String,
 ) {
     /** The generated data-class text would print every secret; mask them. */
     override fun toString(): String = "Config(port=$port, databaseUrl=$databaseUrl, dbUser=$dbUser, dbPassword=***, jwtSecret=***, " +
@@ -70,6 +73,9 @@ data class Config(
                 azureRegion = opt("AZURE_SPEECH_REGION") ?: "germanywestcentral",
                 azureSecondsPerMonth = int("AZURE_SECONDS_PER_MONTH", 16200).coerceAtLeast(0),
                 pronunciationsPerDay = int("PRONUNCIATIONS_PER_DAY", 100).coerceAtLeast(0),
+                liveMinutesPerDay = int("LIVE_MINUTES_PER_DAY", 30).coerceIn(0, 120),
+                realtimeModel = opt("REALTIME_MODEL") ?: "gpt-realtime",
+                realtimeVoice = opt("REALTIME_VOICE") ?: "marin",
             )
         }
     }

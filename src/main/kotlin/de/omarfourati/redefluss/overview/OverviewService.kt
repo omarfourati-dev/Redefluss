@@ -12,7 +12,8 @@ import java.time.LocalDate
 @Serializable data class MistakeDto(val id: Long, val category: String, val wrong: String, val right: String,
     val rule: String, val example: String, val count: Int, val lastSeen: String, val resolved: Boolean)
 @Serializable data class OverviewDto(val streakDays: Int, val minutesToday: Int, val turnsToday: Int,
-    val turnsLeft: Int, val topMistakes: List<MistakeDto>, val vocabDue: Int, val azureSecondsLeft: Int, val pronunciationEnabled: Boolean)
+    val turnsLeft: Int, val topMistakes: List<MistakeDto>, val vocabDue: Int, val azureSecondsLeft: Int, val pronunciationEnabled: Boolean,
+    val liveMinutesLeft: Int)
 @Serializable data class ResolveRequest(val resolved: Boolean)
 
 fun Mistake.dto() = MistakeDto(id, category, wrong, right, rule, example, count, lastSeen.toString(), resolved)
@@ -38,6 +39,7 @@ class OverviewService(
                 (config.azureSecondsPerMonth - usage.azureSecondsBetween(month, month.plusMonths(1))).coerceAtLeast(0)
             },
             pronunciationEnabled = pronunciationEnabled,
+            liveMinutesLeft = (config.liveMinutesPerDay * 60 - usage.liveSecondsOn(today)).coerceAtLeast(0) / 60,
         )
     }
 

@@ -22,7 +22,7 @@ fun Application.installHttpBasics(log: (String) -> Unit, scriptHashes: List<Stri
 
     val scriptSrc = (listOf("'self'") + scriptHashes.map { "'sha256-$it'" }).joinToString(" ")
     val csp = "default-src 'self'; script-src $scriptSrc; img-src 'self' data: blob:; media-src 'self' blob: data:; " +
-        "style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        "style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.openai.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     install(createApplicationPlugin("SecurityHeaders") {
         onCall { call ->
             call.response.headers.append("Content-Security-Policy", csp)

@@ -89,4 +89,17 @@ class ConfigTest {
         assertEquals(8, Config.from(base + ("VOCAB_PER_DAY" to "8")).vocabPerDay)
         assertEquals(12, Config.from(base + ("VOCAB_REVIEWS_PER_DAY" to "12")).vocabReviewsPerDay)
     }
+    @Test fun liveDefaultsAndClamp() {
+        val c = Config.from(base)
+        assertEquals(30, c.liveMinutesPerDay)
+        assertEquals("gpt-realtime", c.realtimeModel)
+        assertEquals("marin", c.realtimeVoice)
+        val o = Config.from(base + mapOf("LIVE_MINUTES_PER_DAY" to "45", "REALTIME_MODEL" to "gpt-realtime-mini", "REALTIME_VOICE" to "cedar"))
+        assertEquals(45, o.liveMinutesPerDay)
+        assertEquals("gpt-realtime-mini", o.realtimeModel)
+        assertEquals("cedar", o.realtimeVoice)
+        assertEquals(120, Config.from(base + ("LIVE_MINUTES_PER_DAY" to "999")).liveMinutesPerDay)
+        assertEquals(0, Config.from(base + ("LIVE_MINUTES_PER_DAY" to "-3")).liveMinutesPerDay)
+        assertFailsWith<ConfigException> { Config.from(base + ("LIVE_MINUTES_PER_DAY" to "dreißig")) }
+    }
 }
