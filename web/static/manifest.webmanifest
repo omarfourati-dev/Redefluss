@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "Redefluss – Deutsch sprechen üben",
+  "short_name": "Redefluss",
+  "description": "Dein persönlicher Deutsch-Sprechtrainer mit Korrektur nach jedem Satz.",
+  "lang": "de",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

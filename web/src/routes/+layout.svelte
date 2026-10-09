@@ -2,13 +2,23 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
+	import { dev } from '$app/env';
 	import { auth } from '#lib/auth.svelte';
+	import { pwa } from '#lib/pwa.svelte';
+
+	let pwaStarted = false;
 
 	let { children } = $props();
 	const isLogin = $derived(page.url.pathname === '/login');
 
 	$effect(() => {
 		if (!auth.token && !isLogin) void goto('/login');
+	});
+
+	$effect(() => {
+		if (dev || pwaStarted) return;
+		pwaStarted = true;
+		void pwa.register().catch(() => undefined);
 	});
 
 	const nav = [
@@ -24,6 +34,21 @@
 	}
 </script>
 
+{#if pwa.offline}
+	<p role="status" class="bg-amber-100 px-4 py-2 text-center text-sm text-amber-900">
+		Keine Verbindung – zum Sprechen brauchst du Internet.
+	</p>
+{/if}
+{#if pwa.updateReady}
+	<p role="status" class="flex items-center justify-center gap-3 bg-brand-700 px-4 py-2 text-sm text-white">
+		Neue Version von Redefluss verfügbar.
+		<button
+			type="button"
+			class="rounded bg-white px-3 py-1 font-semibold text-brand-700"
+			onclick={() => pwa.applyUpdate()}>Neu laden</button
+		>
+	</p>
+{/if}
 {#if isLogin}
 	{@render children()}
 {:else if auth.token}
