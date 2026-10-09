@@ -11,6 +11,6 @@ object TestDb {
     val db: Db by lazy { Db.connect(container.jdbcUrl, container.username, container.password) }
 
     fun reset(): Db = db.also {
-        runBlocking { it.tx { update("TRUNCATE app_user, mistake, practice_session, usage_day RESTART IDENTITY") } }
+        runBlocking { it.tx { update("TRUNCATE app_user, mistake, practice_session, usage_day, vocab_card RESTART IDENTITY") } }
     }
 }

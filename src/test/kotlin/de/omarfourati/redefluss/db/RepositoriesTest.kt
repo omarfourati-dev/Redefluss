@@ -71,4 +71,13 @@ class RepositoriesTest {
         assertFalse(usage.tryCountTurn(day.plusDays(1), 0))
         assertEquals(setOf(day), usage.activeDaysSince(day.minusDays(30)))
     }
+
+    @Test fun vocabCounters() = runBlocking {
+        val usage = UsageRepo(db)
+        val day = LocalDate.of(2026, 10, 9)
+        assertTrue(usage.tryCountVocabGeneration(day))
+        assertFalse(usage.tryCountVocabGeneration(day))
+        assertTrue(usage.tryCountVocabReview(day, 2)); assertTrue(usage.tryCountVocabReview(day, 2))
+        assertFalse(usage.tryCountVocabReview(day, 2))
+    }
 }
