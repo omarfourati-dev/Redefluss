@@ -16,6 +16,8 @@ class SessionRepo(private val db: Db) {
         update("UPDATE practice_session SET turns = turns + 1, mistakes = mistakes + ?, last_at = ? WHERE id = ?", mistakes, now, id) == 1
     }
 
+    suspend fun topic(id: UUID): String = db.tx { sql("SELECT topic FROM practice_session WHERE id = ?", id) { if (it.next()) it.getString(1) else "" } }
+
     /** Practice minutes of sessions started in [from, to): each session with at least one turn counts ≥ 1 minute. */
     suspend fun minutesBetween(from: Instant, to: Instant): Int = db.tx {
         sql("""

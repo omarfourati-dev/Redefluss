@@ -4,6 +4,8 @@ import de.omarfourati.redefluss.auth.AuthService
 import de.omarfourati.redefluss.auth.authRoutes
 import de.omarfourati.redefluss.auth.installAuth
 import de.omarfourati.redefluss.config.Config
+import de.omarfourati.redefluss.conversation.ConversationService
+import de.omarfourati.redefluss.conversation.conversationRoutes
 import de.omarfourati.redefluss.db.UserRepo
 import de.omarfourati.redefluss.http.installHttpBasics
 import de.omarfourati.redefluss.http.respondProblem
@@ -25,6 +27,7 @@ class Deps(
     val clock: Clock,
     val users: UserRepo,
     val auth: AuthService,
+    val conversation: ConversationService,
 )
 
 fun Application.redefluss(deps: Deps) {
@@ -46,6 +49,7 @@ fun Application.redefluss(deps: Deps) {
         // Caddy answers /metrics with 404 publicly; Prometheus reaches it inside the Docker network.
         get("/metrics") { call.respondText(deps.metrics.scrape(), ContentType.parse("text/plain; version=0.0.4")) }
         authRoutes(deps.auth)
+        conversationRoutes(deps.conversation)
         route("/api") {
             handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
             route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }

@@ -4,8 +4,11 @@ import de.omarfourati.redefluss.auth.AuthService
 import de.omarfourati.redefluss.auth.LoginThrottle
 import de.omarfourati.redefluss.auth.Tokens
 import de.omarfourati.redefluss.config.Config
-import de.omarfourati.redefluss.db.Db
-import de.omarfourati.redefluss.db.UserRepo
+import de.omarfourati.redefluss.conversation.ConversationService
+import de.omarfourati.redefluss.db.*
+import de.omarfourati.redefluss.speech.speechFor
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
 import de.omarfourati.redefluss.metrics.Metrics
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
@@ -24,6 +27,7 @@ fun main() {
     if (config.ownerEmail != null && config.ownerPassword != null) {
         runBlocking { auth.bootstrapOwner(config.ownerEmail, config.ownerPassword, config.ownerResetPassword) }
     }
-    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth)
+    val conversation = ConversationService(SessionRepo(db), MistakeRepo(db), UsageRepo(db), speechFor(config, HttpClient(CIO)), metrics, config, clock)
+    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation)
     embeddedServer(Netty, port = config.port) { redefluss(deps) }.start(wait = true)
 }
