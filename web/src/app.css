@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+@custom-variant dark (@media (prefers-color-scheme: dark));
+@theme {
+	--color-brand-600: #0d9488;
+	--color-brand-700: #0f766e;
+	--color-brand-800: #115e59;
+}
+@utility btn {
+	@apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold disabled:opacity-50;
+}
+.btn-primary {
+	@apply btn bg-brand-700 text-white hover:bg-brand-800;
+}
+.btn-secondary {
+	@apply btn border border-slate-300 bg-white text-slate-800 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100;
+}
+.card {
+	@apply rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900;
+}
+.input {
+	@apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900;
+}
