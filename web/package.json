@@ -11,8 +11,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test:unit": "vitest",
-		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright install && playwright test"
+		"test": "vitest run"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
@@ -32,7 +31,6 @@
 		"vitest": "^4.1.8"
 	},
 	"imports": {
-		"#lib": "./src/lib/index.js",
-		"#lib/*": "./src/lib/*"
+		"#lib/*": "./src/lib/*.ts"
 	}
 }

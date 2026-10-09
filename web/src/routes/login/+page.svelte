@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { api, deps } from '$lib/api';
-	import { auth } from '$lib/auth.svelte';
+	import { api, deps } from '#lib/api';
+	import { auth } from '#lib/auth.svelte';
 
 	let email = $state('');
 	let password = $state('');

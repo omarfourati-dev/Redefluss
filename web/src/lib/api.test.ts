@@ -83,4 +83,12 @@ describe('api', () => {
 		expect(init.headers['Content-Type']).toBeUndefined();
 		expect(init.body).toBe(form);
 	});
+
+	it('turns a non-JSON 2xx body into an ApiError', async () => {
+		deps.fetch = vi.fn(async () => new Response('<!doctype html><html></html>', { status: 200 }));
+		await expect(api('/api/unknown')).rejects.toMatchObject({
+			status: 200,
+			message: 'Unerwartete Antwort vom Server.'
+		});
+	});
 });

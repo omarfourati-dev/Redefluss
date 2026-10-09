@@ -1,8 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { describe, expect, it, vi } from 'vitest';
 import Page from './+page.svelte';
-import { deps } from '$lib/api';
-import { auth } from '$lib/auth.svelte';
+import { deps } from '#lib/api';
+import { auth } from '#lib/auth.svelte';
 
 describe('login page', () => {
 	it('logs in and stores the token', async () => {

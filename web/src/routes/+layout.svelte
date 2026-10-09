@@ -2,7 +2,7 @@
 	import '../app.css';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { auth } from '$lib/auth.svelte';
+	import { auth } from '#lib/auth.svelte';
 
 	let { children } = $props();
 	const isLogin = $derived(page.url.pathname === '/login');

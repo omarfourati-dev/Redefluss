@@ -13,9 +13,6 @@ export default defineConfig(({ mode }) => ({
 					filename.includes('node_modules') ? undefined : true
 			},
 
-			// Kit 3 dropped the built-in $lib alias; keep it for the conventional imports.
-			alias: { $lib: 'src/lib' },
-
 			/** SPA: Ktor serves build/ and falls back to index.html for every app route. */
 			adapter: adapter({ pages: 'build', assets: 'build', fallback: 'index.html', strict: false })
 		})

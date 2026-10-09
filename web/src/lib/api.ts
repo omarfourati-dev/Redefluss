@@ -42,7 +42,12 @@ export async function api<T>(
 	}
 	if (!res.ok) throw new ApiError(res.status, await problemDetail(res));
 	if (res.status === 204) return undefined as T;
-	return (await res.json()) as T;
+	try {
+		return (await res.json()) as T;
+	} catch {
+		// e.g. the SPA fallback's index.html answering an unknown /api path with 200
+		throw new ApiError(res.status, 'Unerwartete Antwort vom Server.');
+	}
 }
 
 async function problemDetail(res: Response): Promise<string> {
