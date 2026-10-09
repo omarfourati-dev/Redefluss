@@ -9,3 +9,6 @@ web/test-results
 web/playwright-report
 .env
 .superpowers
+src/main/resources/static
+**/.env*
+*.pem

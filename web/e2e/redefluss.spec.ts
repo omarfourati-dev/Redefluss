@@ -12,7 +12,7 @@ async function login(page: Page) {
   await expect(page.getByRole('heading', { name: 'Übersicht' })).toBeVisible();
 }
 
-test('public basics: robots, health, no index, metrics only internally reachable on the app port', async ({ request }) => {
+test('public basics: robots disallow all, health is up, the API requires a login', async ({ request }) => {
   expect(await (await request.get('/robots.txt')).text()).toContain('Disallow: /');
   expect((await request.get('/healthz')).ok()).toBeTruthy();
   expect((await request.get('/api/overview')).status()).toBe(401);
@@ -29,14 +29,15 @@ test('speaking a sentence gives a correction and fills the overview', async ({ p
   await expect(page.getByText(/Ich höre zu/)).toBeVisible();
   await page.waitForTimeout(1500);
   await page.mouse.up();
-  await expect(page.locator('mark', { hasText: 'den ganzen Zeit' })).toBeVisible();
-  await expect(page.getByText('die ganze Zeit', { exact: true })).toBeVisible();
-  await expect(page.getByText('Interessant! Woran hast du genau gearbeitet?')).toBeVisible();
+  const turn = page.locator('article').last(); // the newest turn; older ones from earlier runs stay above
+  await expect(turn.locator('mark', { hasText: 'den ganzen Zeit' })).toBeVisible();
+  await expect(turn.locator('strong', { hasText: 'die ganze Zeit' })).toBeVisible();
+  await expect(turn.getByText('Interessant! Woran hast du genau gearbeitet?')).toBeVisible();
 
   await page.getByRole('link', { name: 'Übersicht' }).click();
-  await expect(page.getByText('die ganze Zeit', { exact: true })).toBeVisible();
+  await expect(page.locator('li').filter({ hasText: 'den ganzen Zeit' }).first()).toBeVisible();
   await page.getByRole('link', { name: 'Fehler' }).click();
-  await expect(page.getByText('„Zeit“ ist feminin: die Zeit.')).toBeVisible();
+  await expect(page.getByText('„Zeit“ ist feminin: die Zeit.').first()).toBeVisible();
 });
 
 test('typing works too, and a quick tap is ignored', async ({ page }) => {
@@ -48,7 +49,7 @@ test('typing works too, and a quick tap is ignored', async ({ page }) => {
   await page.getByRole('button', { name: 'Lieber tippen' }).click();
   await page.getByLabel('Dein Satz').fill('Ich glaube, du muss mir helfen.');
   await page.getByRole('button', { name: 'Senden' }).click();
-  await expect(page.getByText('du musst', { exact: true })).toBeVisible();
+  await expect(page.locator('article').last().locator('strong', { hasText: 'du musst' })).toBeVisible();
 });
 
 test('installable app: manifest, service worker, no API responses in the cache, offline start', async ({ page, context, request }) => {

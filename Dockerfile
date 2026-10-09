@@ -9,8 +9,9 @@ RUN npm run build
 # --- Kotlin fat JAR with the app in its resources ---
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
-# One JVM, bounded memory: Docker Desktop VMs are often small (2 GB)
-ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx900m -Dkotlin.compiler.execution.strategy=in-process"
+# One JVM with bounded memory (small Docker Desktop VMs); raise with --build-arg GRADLE_XMX=2g
+ARG GRADLE_XMX=900m
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx${GRADLE_XMX} -Dkotlin.compiler.execution.strategy=in-process"
 # Optional: trust an extra root CA (TLS-inspecting proxy / antivirus) via `--secret id=extra_ca,src=ca.pem`
 RUN --mount=type=secret,id=extra_ca,required=false \
     if [ -s /run/secrets/extra_ca ]; then keytool -importcert -noprompt -cacerts -storepass changeit -alias extra-ca -file /run/secrets/extra_ca; fi
