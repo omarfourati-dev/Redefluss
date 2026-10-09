@@ -25,7 +25,7 @@ fun fileNameFor(contentType: String): String = "audio." + when (contentType.subs
 }
 
 /** Runs one upstream call with a timeout; any failure becomes an UpstreamException without details. */
-private suspend fun <T : Any> upstream(stage: String, timeoutMs: Long, block: suspend () -> T): T = try {
+internal suspend fun <T : Any> upstream(stage: String, timeoutMs: Long, block: suspend () -> T): T = try {
     withTimeoutOrNull(timeoutMs) { block() } ?: throw UpstreamException(stage, timeout = true)
 } catch (e: UpstreamException) {
     throw e
@@ -35,7 +35,7 @@ private suspend fun <T : Any> upstream(stage: String, timeoutMs: Long, block: su
     throw UpstreamException(stage, timeout = false)
 }
 
-private suspend fun HttpResponse.okBytes(stage: String, max: Int): ByteArray {
+internal suspend fun HttpResponse.okBytes(stage: String, max: Int): ByteArray {
     if (!status.isSuccess()) throw UpstreamException(stage, timeout = false)
     val declared = headers[HttpHeaders.ContentLength]?.toLongOrNull()
     if (declared != null && declared > max) throw UpstreamException(stage, timeout = false)
@@ -61,37 +61,40 @@ class OpenAiTranscriber(private val http: HttpClient, private val key: String, p
     }
 }
 
+/** One strict-JSON chat completion; returns the message content (callers parse and validate it). */
+internal suspend fun chatJson(http: HttpClient, key: String, model: String, stage: String, timeoutMs: Long,
+                              system: String, messages: List<Pair<String, String>>, schemaName: String, schema: JsonObject): String =
+    upstream(stage, timeoutMs) {
+        val res = http.post("$BASE/chat/completions") {
+            bearerAuth(key)
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject {
+                put("model", model)
+                put("temperature", 0.4)
+                putJsonObject("response_format") {
+                    put("type", "json_schema")
+                    putJsonObject("json_schema") { put("name", schemaName); put("strict", true); put("schema", schema) }
+                }
+                putJsonArray("messages") {
+                    addJsonObject { put("role", "system"); put("content", system) }
+                    messages.forEach { (role, text) -> addJsonObject { put("role", role); put("content", text) } }
+                }
+            }.toString())
+        }
+        json.parseToJsonElement(String(res.okBytes(stage, 1_000_000))).jsonObject["choices"]!!.jsonArray[0]
+            .jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
+    }
+
 class OpenAiCoach(private val http: HttpClient, private val key: String, private val model: String,
                   private val timeoutMs: Long = 30_000) : Coach {
     override suspend fun respond(input: CoachInput): CoachReply {
         repeat(2) {
-            val content = upstream("coach", timeoutMs) {
-                val res = http.post("$BASE/chat/completions") {
-                    bearerAuth(key)
-                    contentType(ContentType.Application.Json)
-                    setBody(requestBody(input).toString())
-                }
-                json.parseToJsonElement(String(res.okBytes("coach", 1_000_000))).jsonObject["choices"]!!.jsonArray[0]
-                    .jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
-            }
+            val messages = input.history.map { t -> (if (t.role == "assistant") "assistant" else "user") to t.text } + ("user" to input.utterance)
+            val content = chatJson(http, key, model, "coach", timeoutMs, systemPrompt(input), messages, "coach_reply", SCHEMA)
             val parsed = runCatching { json.decodeFromString(CoachReply.serializer(), content) }.getOrNull()
             if (parsed != null && parsed.reply.isNotBlank() && parsed.natural.isNotBlank()) return cleanReply(parsed)
         }
         throw UpstreamException("coach", timeout = false)
-    }
-
-    private fun requestBody(input: CoachInput) = buildJsonObject {
-        put("model", model)
-        put("temperature", 0.4)
-        putJsonObject("response_format") {
-            put("type", "json_schema")
-            putJsonObject("json_schema") { put("name", "coach_reply"); put("strict", true); put("schema", SCHEMA) }
-        }
-        putJsonArray("messages") {
-            addJsonObject { put("role", "system"); put("content", systemPrompt(input)) }
-            input.history.forEach { t -> addJsonObject { put("role", if (t.role == "assistant") "assistant" else "user"); put("content", t.text) } }
-            addJsonObject { put("role", "user"); put("content", input.utterance) }
-        }
     }
 
     companion object {

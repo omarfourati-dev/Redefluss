@@ -17,6 +17,16 @@ class VocabRepoTest {
         assertEquals("etwas in angriff nehmen", VocabRepo.key("etwas in Angriff nehmen"))
     }
 
+    @Test fun keyKeepsIndefiniteArticleInIdioms() {
+        assertEquals("ein auge zudrücken", VocabRepo.key("ein Auge zudrücken"))
+    }
+
+    @Test fun insertIfNewRejectsBlankOrArticleOnly() = runBlocking {
+        assertNull(repo.insertIfNew(card("die"), today))
+        assertNull(repo.insertIfNew(card("  "), today))
+        assertEquals(0, repo.createdOn(today).size)
+    }
+
     @Test fun insertIfNewSkipsDuplicates() = runBlocking {
         assertNotNull(repo.insertIfNew(card("Kündigungsfrist"), today))
         assertNull(repo.insertIfNew(card("die kündigungsfrist"), today))

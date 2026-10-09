@@ -21,18 +21,23 @@ private fun ResultSet.cards(): List<Card> = buildList { while (next()) add(card(
 
 class VocabRepo(private val db: Db) {
     companion object {
-        private val ARTICLE = Regex("""^(der|die|das|ein|eine)\s+""", RegexOption.IGNORE_CASE)
+        private val ARTICLE = Regex("""^(der|die|das)(\s+|$)""", RegexOption.IGNORE_CASE)
         private val SPACE = Regex("""\s+""")
         fun key(word: String): String = word.trim().replace(SPACE, " ").replace(ARTICLE, "").lowercase(java.util.Locale.GERMAN)
     }
 
-    suspend fun insertIfNew(card: NewCard, today: LocalDate): Card? = db.tx {
+    suspend fun insertIfNew(card: NewCard, today: LocalDate): Card? {
+        if (key(card.word).isEmpty()) return null
+        return insertKeyed(card, today)
+    }
+
+    private suspend fun insertKeyed(card: NewCard, today: LocalDate): Card? = db.tx {
         sql("""
             INSERT INTO vocab_card (word, word_key, article, plural, meaning, example, theme, source, due_on, created_on)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (word_key) DO NOTHING
             RETURNING $COLS
-        """.trimIndent(), card.word.trim().replace(ARTICLE, ""), key(card.word), card.article.trim(), card.plural.trim(),
+        """.trimIndent(), card.word.trim().replace(ARTICLE, "").trim(), key(card.word), card.article.trim(), card.plural.trim(),
             card.meaning.trim(), card.example.trim(), card.theme, card.source, today, today) { if (it.next()) it.card() else null }
     }
 
