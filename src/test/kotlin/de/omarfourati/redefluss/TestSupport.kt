@@ -1,0 +1,26 @@
+package de.omarfourati.redefluss
+
+import de.omarfourati.redefluss.config.Config
+import de.omarfourati.redefluss.metrics.Metrics
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+
+val TEST_ZONE: ZoneId = ZoneId.of("Europe/Berlin")
+val TEST_CLOCK: Clock = Clock.fixed(Instant.parse("2026-10-08T10:00:00Z"), TEST_ZONE)
+
+fun testConfig(vararg overrides: Pair<String, String>): Config = Config.from(
+    mapOf(
+        "DATABASE_URL" to "jdbc:postgresql://unused/redefluss", "DB_USER" to "u", "DB_PASSWORD" to "p",
+        "JWT_SECRET" to "k".repeat(32), "SPEECH" to "fake",
+    ) + overrides,
+)
+
+/** Central place to build Deps for tests; later tasks add parameters with test defaults here. */
+fun testDeps(
+    config: Config = testConfig(),
+    ping: () -> Unit = {},
+    metrics: Metrics = Metrics(),
+    log: (String) -> Unit = {},
+    clock: Clock = TEST_CLOCK,
+) = Deps(config = config, ping = ping, metrics = metrics, log = log, clock = clock)

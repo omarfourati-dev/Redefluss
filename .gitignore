@@ -1,0 +1,13 @@
+.gradle/
+build/
+.kotlin/
+*.iml
+.idea/
+.env
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/test-results/
+web/playwright-report/
+src/main/resources/static/*
+!src/main/resources/static/.gitkeep

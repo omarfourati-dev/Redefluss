@@ -1,0 +1,46 @@
+package de.omarfourati.redefluss
+
+import de.omarfourati.redefluss.config.Config
+import de.omarfourati.redefluss.http.installHttpBasics
+import de.omarfourati.redefluss.http.respondProblem
+import de.omarfourati.redefluss.metrics.Metrics
+import io.ktor.http.*
+import io.ktor.server.application.*
+import io.ktor.server.metrics.micrometer.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.micrometer.core.instrument.binder.jvm.JvmMemoryMetrics
+import java.time.Clock
+
+/** Everything the HTTP layer needs. Later tasks add services here (and in TestSupport.testDeps). */
+class Deps(
+    val config: Config,
+    val ping: () -> Unit,
+    val metrics: Metrics,
+    val log: (String) -> Unit,
+    val clock: Clock,
+)
+
+fun Application.redefluss(deps: Deps) {
+    installHttpBasics(deps.log)
+    install(MicrometerMetrics) {
+        registry = deps.metrics.registry
+        meterBinders = listOf(JvmMemoryMetrics())
+    }
+    routing {
+        get("/healthz") {
+            try {
+                deps.ping()
+                call.respondText("""{"status":"ok"}""", ContentType.Application.Json)
+            } catch (e: Exception) {
+                call.respondProblem(HttpStatusCode.ServiceUnavailable, "Service Unavailable", "Datenbank nicht erreichbar.")
+            }
+        }
+        // Caddy answers /metrics with 404 publicly; Prometheus reaches it inside the Docker network.
+        get("/metrics") { call.respondText(deps.metrics.scrape(), ContentType.parse("text/plain; version=0.0.4")) }
+        route("/api") {
+            handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
+            route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }
+        }
+    }
+}
