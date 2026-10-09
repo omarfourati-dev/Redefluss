@@ -31,6 +31,8 @@ const assessed = {
   quota: { ...quota, secondsLeft: 3 * 3600 + 11 * 60, todayLeft: 86 },
   weakWords: ['Besprechung']
 };
+// Bytes, not a jsdom Blob: Node 22's Response needs Blob.stream(), which jsdom's Blob lacks (Node 24 tolerates it).
+const mp3 = () => new Response(new Uint8Array([0x49, 0x44, 0x33]), { status: 200, headers: { 'Content-Type': 'audio/mpeg' } });
 const DISABLED = 'Aussprache ist noch nicht eingerichtet.';
 
 type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -123,7 +125,7 @@ describe('Aussprache', () => {
     const Native = globalThis.Audio;
     globalThis.Audio = function () { const a = new Native(); created.push(a); return a; } as unknown as typeof Audio;
     mockApi({ '/api/pronunciation/exercises': () => json(200, exercises),
-      '/api/pronunciation/speak': () => new Response(new Blob(['mp3'], { type: 'audio/mpeg' }), { status: 200 }) });
+      '/api/pronunciation/speak': () => mp3() });
     render(Page);
     expect(await screen.findByRole('button', { name: /Halten und sprechen/ })).not.toBeDisabled();
     await fireEvent.click(screen.getByRole('button', { name: '▶ Vorsprechen' }));
@@ -143,7 +145,7 @@ describe('Aussprache', () => {
 
   it('"Vorsprechen" and "Langsam" ask the API with slow false/true and play the audio', async () => {
     mockApi({ '/api/pronunciation/exercises': () => json(200, exercises),
-      '/api/pronunciation/speak': () => new Response(new Blob(['mp3'], { type: 'audio/mpeg' }), { status: 200 }) });
+      '/api/pronunciation/speak': () => mp3() });
     render(Page);
     await fireEvent.click(await screen.findByRole('button', { name: '▶ Vorsprechen' }));
     await vi.waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2)); // unlock + play
@@ -181,7 +183,7 @@ describe('Aussprache', () => {
 
   it('a slow word from the score view speaks just that word', async () => {
     mockApi({ '/api/pronunciation/exercises': () => json(200, exercises), '/api/pronunciation/assess': () => json(200, assessed),
-      '/api/pronunciation/speak': () => new Response(new Blob(['mp3'], { type: 'audio/mpeg' }), { status: 200 }) });
+      '/api/pronunciation/speak': () => mp3() });
     pageState.url = new URL('http://localhost/aussprache?card=7');
     render(Page);
     await screen.findByRole('button', { name: /Halten und sprechen/ });
