@@ -27,6 +27,13 @@ class OpenAiTest {
     private val input = CoachInput("Ich habe den ganzen Zeit gearbeitet.", "Arbeit",
         listOf(HistoryTurn("assistant", "Was hast du heute gemacht?")), listOf(KnownMistake("du muss", "du musst", "konjugation")))
 
+    @Test fun productionClientHasNoEngineRequestTimeout() {
+        val c = openAiHttpClient()
+        try {
+            assertEquals(0L, (c.engine.config as io.ktor.client.engine.cio.CIOEngineConfig).requestTimeout)
+        } finally { c.close() }
+    }
+
     @Test fun fileNames() {
         assertEquals("audio.m4a", fileNameFor("audio/mp4"))
         assertEquals("audio.m4a", fileNameFor("audio/x-m4a"))

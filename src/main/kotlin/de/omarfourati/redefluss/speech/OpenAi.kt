@@ -1,6 +1,7 @@
 package de.omarfourati.redefluss.speech
 
 import io.ktor.client.*
+import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
@@ -11,6 +12,9 @@ import kotlinx.serialization.json.*
 
 private const val BASE = "https://api.openai.com/v1"
 private val json = Json { ignoreUnknownKeys = true }
+
+/** Production client: CIO's default 15 s requestTimeout would cut the 20/30 s stage budgets, so the per-stage timeout is the only limit. */
+fun openAiHttpClient(): HttpClient = HttpClient(CIO) { engine { requestTimeout = 0 } }
 
 fun fileNameFor(contentType: String): String = "audio." + when (contentType.substringBefore(';').trim().lowercase()) {
     "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/aac" -> "m4a"

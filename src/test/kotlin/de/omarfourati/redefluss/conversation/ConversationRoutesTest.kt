@@ -8,6 +8,7 @@ import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -131,6 +132,22 @@ class ConversationRoutesTest {
         val res = c.turn(token, id, text = "Hallo")
         assertEquals(HttpStatusCode.BadGateway, res.status)
         assertTrue("Sprachdienst" in res.bodyAsText())
+    }
+
+    @Test fun slowCoachIs504TimeoutWithMetric() = testApplication {
+        val http = io.ktor.client.HttpClient(io.ktor.client.engine.mock.MockEngine {
+            kotlinx.coroutines.delay(5_000)
+            respond("{}", HttpStatusCode.OK)
+        })
+        val deps = testDeps(config = testConfig(), db = TestDb.reset(),
+            speech = Speech(FakeTranscriber(), OpenAiCoach(http, "k", "m", timeoutMs = 100), FakeVoice()))
+        runBlocking { deps.auth.bootstrapOwner("omar@example.de", pw, reset = false) }
+        application { redefluss(deps) }
+        val (c, token, id) = session()
+        val res = c.turn(token, id, text = "Hallo")
+        assertEquals(HttpStatusCode.GatewayTimeout, res.status)
+        assertTrue("Sprachdienst" in res.bodyAsText())
+        assertTrue("redefluss_turns_total{outcome=\"timeout\"} 1.0" in deps.metrics.scrape())
     }
 
     @Test fun voiceFailureStillAnswers() = testApplication {

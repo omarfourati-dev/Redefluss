@@ -7,6 +7,7 @@
   import TurnView from '../../lib/components/TurnView.svelte';
 
   const TOPICS = ['Arbeit', 'Alltag', 'Smalltalk', 'Nachrichten', 'Freies Thema'];
+  const PROMPT_MS = 1000;
   const SPEAK_KEY = 'redefluss.speak';
   const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
@@ -16,6 +17,7 @@
   let turns = $state<TurnResponse[]>([]);
   let busy = $state(false);
   let error = $state('');
+  let info = $state('');
   let typing = $state(false);
   let text = $state('');
   let recording = $state(false);
@@ -128,10 +130,11 @@
   async function press() {
     if (busy || recorder || pressed) return;
     pressed = true;
-    error = '';
+    error = ''; info = '';
     unlockAudio();
     const r = recorderFactory.create((blob) => { if (recorder === r) finish(blob); });
     recorder = r;
+    const t0 = performance.now();
     try {
       await r.start();
     } catch (e) {
@@ -147,7 +150,9 @@
       // released before the permission prompt resolved: discard
       recorder = null;
       void r.stop();
-      error = 'Zu kurz – halte die Taste gedrückt, während du sprichst.';
+      // a long wait means the user was answering the microphone prompt, not tapping too briefly
+      if (performance.now() - t0 > PROMPT_MS) info = 'Mikrofon ist freigegeben – halte die Taste jetzt gedrückt und sprich.';
+      else error = 'Zu kurz – halte die Taste gedrückt, während du sprichst.';
       return;
     }
     recording = true; seconds = 0;
@@ -206,6 +211,7 @@
   </div>
 
   {#if error}<p role="alert" class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>{/if}
+  {#if info}<p role="status" class="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-200">{info}</p>{/if}
   {#if busy}<p class="mt-4 text-sm text-slate-500" aria-live="polite">Einen Moment …</p>{/if}
 
   <div class="sticky bottom-0 mt-6 flex flex-col items-center gap-3 bg-slate-50/90 py-4 backdrop-blur dark:bg-slate-950/90">

@@ -26,6 +26,10 @@ class Auth {
 		write(TOKEN, token);
 		write(EMAIL, email);
 	}
+	/** The token as persisted (another tab may have replaced it). */
+	stored(): string | null {
+		return read(TOKEN);
+	}
 	clear() {
 		this.token = null;
 		this.email = null;

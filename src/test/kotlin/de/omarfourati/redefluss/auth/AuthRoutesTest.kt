@@ -118,4 +118,13 @@ class AuthRoutesTest {
         deps.auth.bootstrapOwner("omar@example.de", pw, reset = true)
         assertTrue(Passwords.verify(pw, deps.users.findByEmail("omar@example.de")!!.passwordHash))
     }
+
+    @Test fun resetWithTheSamePasswordDoesNotLogEveryoneOutOnEachStart() = runBlocking {
+        val deps = testDeps(db = TestDb.reset())
+        deps.auth.bootstrapOwner("omar@example.de", pw, reset = true)
+        deps.auth.bootstrapOwner("omar@example.de", pw, reset = true)
+        val before = deps.users.findByEmail("omar@example.de")!!.tokenVersion
+        deps.auth.bootstrapOwner("omar@example.de", pw, reset = true)
+        assertEquals(before, deps.users.findByEmail("omar@example.de")!!.tokenVersion)
+    }
 }

@@ -49,7 +49,7 @@ class ConversationService(
             val known = mistakes.top(5).map { KnownMistake(it.wrong, it.right, it.category) }
             val topic = topicOf(req.sessionId)
             val coach = timed("coach") { speech.coach.respond(CoachInput(transcript, topic, clean(req.history), known)) }
-            val voice = if (req.speak) runCatching { timed("voice") { speech.voice.speak(coach.reply) } }.getOrNull() else null
+            val voice = if (req.speak) try { timed("voice") { speech.voice.speak(coach.reply) } } catch (_: UpstreamException) { null } else null
 
             val now = clock.instant()
             coach.corrections.forEach {

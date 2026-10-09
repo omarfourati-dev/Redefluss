@@ -49,6 +49,21 @@ describe('Gespräch', () => {
     URL.revokeObjectURL = vi.fn();
   });
 
+  it('a long permission prompt shows the friendly hint instead of "Zu kurz"', async () => {
+    await openSession();
+    const mic = fakeMic();
+    let t = 1000;
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => t);
+    const btn = screen.getByRole('button', { name: /Halten und sprechen/ });
+    await fireEvent.pointerDown(btn);
+    await fireEvent.pointerUp(btn);
+    t += 5000;
+    mic.grant();
+    expect(await screen.findByRole('status')).toHaveTextContent('Mikrofon ist freigegeben');
+    expect(screen.queryByRole('alert')).toBeNull();
+    spy.mockRestore();
+  });
+
   it('release before the permission resolves discards the recording', async () => {
     await openSession();
     const mic = fakeMic();

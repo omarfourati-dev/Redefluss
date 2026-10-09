@@ -24,7 +24,8 @@ export async function api<T>(
 		Accept: 'application/json',
 		...(init.headers as Record<string, string>)
 	};
-	if (auth.token) headers.Authorization = `Bearer ${auth.token}`;
+	const sent = auth.token;
+	if (sent) headers.Authorization = `Bearer ${sent}`;
 	let body = init.body;
 	if (init.json !== undefined) {
 		headers['Content-Type'] = 'application/json';
@@ -37,8 +38,12 @@ export async function api<T>(
 		throw new ApiError(0, 'Keine Verbindung zum Server.');
 	}
 	if (res.status === 401 && path !== '/api/auth/login') {
-		auth.clear();
-		void deps.goto('/login');
+		// a stale tab must not wipe a newer token that another tab stored (e.g. after a password change)
+		const stored = auth.stored();
+		if (auth.token === sent && (stored === null || stored === sent)) {
+			auth.clear();
+			void deps.goto('/login');
+		}
 	}
 	if (!res.ok) throw new ApiError(res.status, await problemDetail(res));
 	if (res.status === 204) return undefined as T;

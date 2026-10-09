@@ -55,7 +55,7 @@ class AuthService(
             existing == null && users.count() > 0 ->
                 LoggerFactory.getLogger("redefluss").warn("OWNER_EMAIL differs from the existing account; keeping the existing single account unchanged")
             existing == null -> users.create(email, Passwords.hash(password), clock.instant())
-            reset -> users.setPassword(existing.id, Passwords.hash(password))
+            reset && !Passwords.verify(password, existing.passwordHash) -> users.setPassword(existing.id, Passwords.hash(password))
         }
     }
 

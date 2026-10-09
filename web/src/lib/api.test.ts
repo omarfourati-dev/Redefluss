@@ -39,6 +39,29 @@ describe('api', () => {
 		expect(deps.goto).toHaveBeenCalledWith('/login');
 	});
 
+	it('401 for a stale token does not wipe the token another tab stored', async () => {
+		auth.set('old', 'a@b.de');
+		deps.fetch = vi.fn(async () => {
+			auth.set('new', 'a@b.de'); // another tab / the password change stored a new token meanwhile
+			return res(401, { status: 401, detail: 'Bitte melde dich an.' }, 'application/problem+json');
+		});
+		await expect(api('/api/overview')).rejects.toBeInstanceOf(ApiError);
+		expect(auth.token).toBe('new');
+		expect(localStorage.getItem('redefluss.token')).toBe('new');
+		expect(deps.goto).not.toHaveBeenCalled();
+	});
+
+	it('401 keeps a newer token that only another tab persisted', async () => {
+		auth.set('old', 'a@b.de');
+		deps.fetch = vi.fn(async () => {
+			localStorage.setItem('redefluss.token', 'new');
+			return res(401, { status: 401, detail: 'x' }, 'application/problem+json');
+		});
+		await expect(api('/api/overview')).rejects.toBeInstanceOf(ApiError);
+		expect(localStorage.getItem('redefluss.token')).toBe('new');
+		expect(deps.goto).not.toHaveBeenCalled();
+	});
+
 	it('a failed login (401 on /api/auth/login) does not redirect', async () => {
 		deps.fetch = vi.fn(async () =>
 			res(
