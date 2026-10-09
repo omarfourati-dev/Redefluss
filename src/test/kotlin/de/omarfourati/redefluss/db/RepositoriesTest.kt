@@ -13,7 +13,9 @@ class RepositoriesTest {
 
     @Test fun users() = runBlocking {
         val users = UserRepo(db)
+        assertEquals(0L, users.count())
         val u = users.create("omar@example.de", "hash1", t0)
+        assertEquals(1L, users.count())
         assertEquals(0, u.tokenVersion)
         assertEquals(u, users.findByEmail("omar@example.de"))
         assertEquals(u, users.findById(u.id))

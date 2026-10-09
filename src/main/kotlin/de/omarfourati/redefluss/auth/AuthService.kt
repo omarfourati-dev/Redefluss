@@ -6,6 +6,7 @@ import de.omarfourati.redefluss.http.badRequest
 import de.omarfourati.redefluss.metrics.Metrics
 import io.ktor.http.*
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
 import java.time.Clock
 
 @Serializable data class LoginResponse(val token: String, val email: String)
@@ -35,7 +36,12 @@ class AuthService(
 
     suspend fun changePassword(id: Long, current: String, next: String): LoginResponse {
         val user = users.findById(id) ?: throw ApiException(HttpStatusCode.Unauthorized, "Unauthorized", "Bitte melde dich an.")
+        val key = "pw-change:$id"
+        if (!throttle.reserveKey(key)) {
+            throw ApiException(HttpStatusCode.TooManyRequests, "Too Many Requests", "Zu viele Versuche. Bitte versuch es in 15 Minuten noch einmal.")
+        }
         if (!Passwords.verify(current, user.passwordHash)) throw badRequest("Das aktuelle Passwort stimmt nicht.")
+        throttle.clearKey(key)
         Passwords.problem(next)?.let { throw badRequest(it) }
         val updated = users.setPassword(id, Passwords.hash(next))
         return LoginResponse(tokens.issue(updated), updated.email)
@@ -46,6 +52,8 @@ class AuthService(
         Passwords.problem(password)?.let { error("OWNER_PASSWORD: $it") }
         val existing = users.findByEmail(email)
         when {
+            existing == null && users.count() > 0 ->
+                LoggerFactory.getLogger("redefluss").warn("OWNER_EMAIL differs from the existing account; keeping the existing single account unchanged")
             existing == null -> users.create(email, Passwords.hash(password), clock.instant())
             reset -> users.setPassword(existing.id, Passwords.hash(password))
         }

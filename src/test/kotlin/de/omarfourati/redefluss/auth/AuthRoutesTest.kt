@@ -81,6 +81,33 @@ class AuthRoutesTest {
         assertEquals(HttpStatusCode.OK, c.login(password = "neues-passwort-123").status)
     }
 
+    @Test fun passwordChangeGuessingIsThrottled() = testApplication {
+        application { redefluss(deps()) }
+        val c = jsonClient()
+        val token = c.login().body<JsonObject>()["token"]!!.jsonPrimitive.content
+        suspend fun change(current: String) = c.post("/api/auth/password") { bearerAuth(token); contentType(ContentType.Application.Json)
+            setBody(mapOf("current" to current, "next" to "neues-passwort-123")) }
+        repeat(5) { assertEquals(HttpStatusCode.BadRequest, change("falsch").status) }
+        assertEquals(HttpStatusCode.TooManyRequests, change(pw).status)
+    }
+
+    @Test fun expiredTokenIs401() = testApplication {
+        val deps = deps()
+        application { redefluss(deps) }
+        val user = runBlocking { deps.users.findByEmail("omar@example.de")!! }
+        val past = java.time.Clock.offset(TEST_CLOCK, java.time.Duration.ofDays(-31))
+        val expired = Tokens(deps.config.jwtSecret, past).issue(user)
+        assertEquals(HttpStatusCode.Unauthorized, client.get("/api/auth/me") { bearerAuth(expired) }.status)
+    }
+
+    @Test fun bootstrapNeverCreatesASecondAccount() = runBlocking {
+        val deps = testDeps(db = TestDb.reset())
+        deps.auth.bootstrapOwner("omar@example.de", pw, reset = false)
+        deps.auth.bootstrapOwner("other@example.de", pw, reset = true)
+        assertEquals(1L, deps.users.count())
+        assertNull(deps.users.findByEmail("other@example.de"))
+    }
+
     @Test fun bootstrapKeepsAChangedPasswordUnlessResetIsRequested() = runBlocking {
         val deps = testDeps(db = TestDb.reset())
         deps.auth.bootstrapOwner("omar@example.de", pw, reset = false)

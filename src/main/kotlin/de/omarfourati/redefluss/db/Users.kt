@@ -27,6 +27,8 @@ class UserRepo(private val db: Db) {
 
     suspend fun findById(id: Long): User? = db.tx { Users.selectAll().where { Users.id eq id }.singleOrNull()?.toUser() }
 
+    suspend fun count(): Long = db.tx { sql("SELECT count(*) FROM app_user") { rs -> rs.next(); rs.getLong(1) } }
+
     suspend fun create(email: String, hash: String, now: Instant): User = db.tx {
         val id = Users.insert {
             it[Users.email] = email.trim().lowercase(); it[passwordHash] = hash; it[tokenVersion] = 0; it[createdAt] = now
