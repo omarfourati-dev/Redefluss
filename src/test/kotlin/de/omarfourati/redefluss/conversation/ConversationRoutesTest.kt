@@ -126,6 +126,20 @@ class ConversationRoutesTest {
         assertEquals("Arbeit", input.topic)
     }
 
+    @Test fun pronunciationMistakesAreNotSentToTheCoach() = testApplication {
+        val coach = SpyCoach()
+        val deps = setup(coach = coach)
+        application { redefluss(deps) }
+        runBlocking {
+            val m = de.omarfourati.redefluss.db.MistakeRepo(TestDb.db)
+            repeat(5) { m.record(de.omarfourati.redefluss.db.NewMistake("aussprache", "Brücke", "Brücke", "Aussprache von „Brücke“ üben", "Über die Brücke."), TEST_CLOCK.instant()) }
+            m.record(de.omarfourati.redefluss.db.NewMistake("konjugation", "du muss", "du musst", "du → -st", "Du muss gehen."), TEST_CLOCK.instant())
+        }
+        val (c, token, id) = session()
+        c.turn(token, id, text = "Hallo")
+        assertEquals(listOf("du muss"), coach.last!!.known.map { it.wrong })
+    }
+
     @Test fun coachFailureIs502AndVoiceFailureDegrades() = testApplication {
         application { redefluss(setup(coach = SpyCoach(fail = true))) }
         val (c, token, id) = session()

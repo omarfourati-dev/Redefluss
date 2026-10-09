@@ -65,14 +65,15 @@ class PronunciationService(
 
     suspend fun monthSecondsUsed(): Int = monthStart().let { usage.azureSecondsBetween(it, it.plusMonths(1)) }
 
-    suspend fun secondsLeft(): Int = (config.azureSecondsPerMonth - monthSecondsUsed()).coerceAtLeast(0)
-
     /** Sets the month gauge from the database (at startup and after each counted clip). */
     suspend fun refreshGauge() = metrics.azureSecondsMonth(monthSecondsUsed())
 
+    /** Also refreshes the gauge, so it drops to the new month's sum after the 1st without waiting for a counted clip. */
     suspend fun quota(): QuotaDto {
         requireEnabled()
-        return QuotaDto(true, secondsLeft(), config.azureSecondsPerMonth,
+        val used = monthSecondsUsed()
+        metrics.azureSecondsMonth(used)
+        return QuotaDto(true, (config.azureSecondsPerMonth - used).coerceAtLeast(0), config.azureSecondsPerMonth,
             (config.pronunciationsPerDay - usage.pronunciationsOn(today())).coerceAtLeast(0))
     }
 

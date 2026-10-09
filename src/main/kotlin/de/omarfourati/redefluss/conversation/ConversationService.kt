@@ -61,7 +61,8 @@ class ConversationService(
                 metrics.turn("no_speech")
                 throw ApiException(HttpStatusCode.UnprocessableEntity, "Unprocessable Content", "Ich habe nichts verstanden – bitte noch einmal.")
             }
-            val known = mistakes.top(5).map { KnownMistake(it.wrong, it.right, it.category) }
+            // Pronunciation mistakes ("Brücke" → "Brücke") would crowd out the grammar the coach can actually practise.
+            val known = mistakes.topExcept("aussprache", 5).map { KnownMistake(it.wrong, it.right, it.category) }
             val topic = topicOf(req.sessionId)
             val coach = metrics.timed("coach") { speech.coach.respond(CoachInput(transcript, topic, clean(req.history), known)) }
             val voice = if (req.speak) try { metrics.timed("voice") { speech.voice.speak(coach.reply) } } catch (_: UpstreamException) { null } else null

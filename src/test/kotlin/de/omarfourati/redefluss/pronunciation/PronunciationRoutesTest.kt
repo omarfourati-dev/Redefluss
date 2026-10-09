@@ -316,6 +316,22 @@ class PronunciationRoutesTest {
         assertTrue("redefluss_azure_seconds_month 6.0" in deps.metrics.scrape())
     }
 
+    @Test fun quotaAndExercisesRefreshTheGaugeAfterAMonthChange() = testApplication {
+        val clock = Clock.fixed(Instant.parse("2026-10-31T23:30:00Z"), TEST_ZONE) // 1 November in Berlin
+        val deps = setup(clock = clock)
+        runBlocking {
+            UsageRepo(TestDb.db).tryCountAzure(LocalDate.of(2026, 10, 31), LocalDate.of(2026, 10, 1), 500, 16200, 100)
+            deps.metrics.azureSecondsMonth(500) // value left over from October
+        }
+        application { redefluss(deps) }
+        val (c, token) = login()
+        assertEquals(HttpStatusCode.OK, c.get("/api/pronunciation/quota") { bearerAuth(token) }.status)
+        assertTrue("redefluss_azure_seconds_month 0.0" in deps.metrics.scrape())
+        deps.metrics.azureSecondsMonth(500)
+        assertEquals(HttpStatusCode.OK, c.get("/api/pronunciation/exercises") { bearerAuth(token) }.status)
+        assertTrue("redefluss_azure_seconds_month 0.0" in deps.metrics.scrape())
+    }
+
     @Test fun requiresLogin() = testApplication {
         application { redefluss(setup()) }
         assertEquals(HttpStatusCode.Unauthorized, client.get("/api/pronunciation/exercises").status)
