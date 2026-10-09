@@ -2,6 +2,7 @@ package de.omarfourati.redefluss.interview
 
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.*
+import de.omarfourati.redefluss.http.ApiException
 import de.omarfourati.redefluss.speech.Correction
 import de.omarfourati.redefluss.speech.UpstreamException
 import io.ktor.client.*
@@ -12,7 +13,7 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.testing.*
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import java.time.LocalDate
 import java.util.UUID
@@ -30,10 +31,12 @@ class LiveRoutesTest {
     }
 
     /** Records each call; returns [report] (or the fake's) or throws [fail]. */
-    private class SpyReporter(private val report: InterviewReport? = null, private val fail: Exception? = null) : InterviewReporter {
+    private class SpyReporter(private val report: InterviewReport? = null, private val fail: Exception? = null,
+                              private val failTimes: Int = Int.MAX_VALUE) : InterviewReporter {
         val calls = mutableListOf<Triple<String, InterviewRole, List<TranscriptEntry>>>()
         override suspend fun report(jobAd: String, role: InterviewRole, transcript: List<TranscriptEntry>): InterviewReport {
-            calls += Triple(jobAd, role, transcript); fail?.let { throw it }
+            calls += Triple(jobAd, role, transcript)
+            if (calls.size <= failTimes) fail?.let { throw it }
             return report ?: FakeReporter().report(jobAd, role, transcript)
         }
     }
@@ -341,8 +344,8 @@ class LiveRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, res2.status)
         assertEquals(text, res2.detail())
         assertEquals(90, live())
-        // Settled once: a retry neither settles again nor reports, a late cancel refunds nothing.
-        assertEquals(HttpStatusCode.Conflict, c.report(token, noOmar, seconds = 0).status)
+        // Settled once: a retry is still 422 and settles nothing again, a late cancel refunds nothing.
+        assertEquals(HttpStatusCode.UnprocessableEntity, c.report(token, noOmar, seconds = 0, transcript = emptyList()).status)
         assertEquals(90, live())
         assertEquals(HttpStatusCode.NoContent, c.cancel(token, noOmar).status)
         assertEquals(90, live())
@@ -455,5 +458,81 @@ class LiveRoutesTest {
         val deps = setup()
         application { redefluss(deps) }
         assertEquals(HttpStatusCode.Unauthorized, client.post("/api/live/report").status)
+    }
+
+    @Test fun failedReportCanBeRetriedAndSettlesOnce() = testApplication {
+        val spy = SpyReporter(fail = UpstreamException("interview_report", timeout = true), failTimes = 1)
+        val deps = setup(reporter = spy)
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val id = c.startId(token)
+        assertEquals(HttpStatusCode.GatewayTimeout, c.report(token, id, seconds = 240).status)
+        assertEquals(240, live())
+        assertEquals("", summaryOf(id))
+        // The retry reports with the first attempt's settlement (its own seconds are ignored).
+        val res = c.report(token, id, seconds = 500)
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(240, live())
+        assertEquals(2, spy.calls.size)
+        assertEquals(res.body<JsonObject>()["overall"]!!.jsonPrimitive.content, summaryOf(id))
+        val m = runBlocking { MistakeRepo(db).list(MistakeStatus.ALL) }.single()
+        assertEquals(1, m.count)
+        assertTrue(Regex("""redefluss_live_seconds_total(\{[^}]*\})? 240\.0""").containsMatchIn(deps.metrics.scrape()))
+        val again = c.report(token, id)
+        assertEquals(HttpStatusCode.Conflict, again.status)
+        assertEquals("Dieses Gespräch ist schon ausgewertet.", again.detail())
+        assertEquals(2, spy.calls.size)
+    }
+
+    @Test fun cancelAfterFailedReportRefundsNothing() = testApplication {
+        val deps = setup(reporter = SpyReporter(fail = UpstreamException("interview_report", timeout = false)))
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val id = c.startId(token)
+        assertEquals(HttpStatusCode.BadGateway, c.report(token, id, seconds = 100).status)
+        assertEquals(HttpStatusCode.NoContent, c.cancel(token, id).status)
+        assertEquals(100, live())
+        assertEquals("", summaryOf(id))
+    }
+
+    @Test fun concurrentReportCallsOnlyOneProceeds() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var calls = 0
+        val gated = object : InterviewReporter {
+            override suspend fun report(jobAd: String, role: InterviewRole, transcript: List<TranscriptEntry>): InterviewReport {
+                calls++; entered.complete(Unit); release.await()
+                return FakeReporter().report(jobAd, role, transcript)
+            }
+        }
+        val deps = setup(reporter = gated)
+        val id = UUID.fromString(deps.live.start(StartRequest(jobAd, "recruiter", 10)).sessionId)
+        val transcript = listOf(TranscriptEntry("interviewer", "Frage?"), TranscriptEntry("omar", "Antwort."))
+        val first = async(Dispatchers.Default) { deps.live.report(id, 120, transcript) }
+        entered.await()
+        val busy = assertFailsWith<ApiException> { deps.live.report(id, 300, transcript) }
+        assertEquals(HttpStatusCode.Conflict, busy.status)
+        assertEquals("Der Bericht wird gerade erstellt.", busy.detail)
+        release.complete(Unit)
+        assertTrue(first.await().overall.isNotBlank())
+        assertEquals(1, calls)
+        assertEquals(120, live())
+        assertEquals("Dieses Gespräch ist schon ausgewertet.", assertFailsWith<ApiException> { deps.live.report(id, 300, transcript) }.detail)
+    }
+
+    @Test fun reportWithoutSecondsIs400() = testApplication {
+        val spy = SpyReporter()
+        val deps = setup(reporter = spy)
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val id = c.startId(token)
+        val res = c.post("/api/live/report") { bearerAuth(token); contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("sessionId", id); put("transcript", JsonArray(interview)) }) }
+        assertEquals(HttpStatusCode.BadRequest, res.status)
+        assertEquals("Die Anfrage ist ungültig.", res.detail())
+        assertEquals(600, live())
+        assertTrue(spy.calls.isEmpty())
+        assertEquals(HttpStatusCode.OK, c.report(token, id, seconds = 60).status)
+        assertEquals(60, live())
     }
 }

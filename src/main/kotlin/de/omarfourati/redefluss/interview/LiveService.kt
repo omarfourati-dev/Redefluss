@@ -42,9 +42,25 @@ private const val CACHE_SIZE = 20
  */
 class LiveSession(val id: UUID, val day: LocalDate, val reservedSeconds: Int, val jobAd: String, val role: InterviewRole, val minutes: Int) {
     private val claimed = AtomicBoolean(false)
+    /** The settle-once guard shared by cancel and report: whoever claims first settles the reservation. */
     fun claim(): Boolean = claimed.compareAndSet(false, true)
-    /** Already reported or cancelled (a peek; only [claim] decides). */
     val isClaimed: Boolean get() = claimed.get()
+
+    // Report state. A failed report attempt (coach down, timeout, DB error) can be retried: the time stays settled once,
+    // only a finished report (or a cancel) makes the session final. [beginReport] keeps two report calls from overlapping.
+    private val inFlight = AtomicBoolean(false)
+    @Volatile var claimedByReport = false; private set
+    @Volatile var settled = false; private set
+    @Volatile var mistakesRecorded = false; private set
+    @Volatile var reported = false; private set
+    fun beginReport(): Boolean = inFlight.compareAndSet(false, true)
+    fun endReport() = inFlight.set(false)
+    fun claimForReport(): Boolean = (claimedByReport || claim()).also { if (it) claimedByReport = true }
+    fun markSettled() { settled = true }
+    fun markMistakesRecorded() { mistakesRecorded = true }
+    fun markReported() { reported = true }
+    /** Cancelled, or claimed by a report that finished. */
+    val isFinal: Boolean get() = reported || (isClaimed && !claimedByReport)
     override fun toString(): String = "LiveSession(id=$id, day=$day, reservedSeconds=$reservedSeconds, role=$role, minutes=$minutes)"
 }
 
@@ -114,6 +130,8 @@ class LiveService(
      * Settles the reservation (used = min(seconds, reserved), the rest is given back), then asks the coach for the report,
      * records its corrections as mistakes and stores the one-sentence verdict as the session summary.
      * Only completed, non-blank transcript entries count; without anything from Omar there is no report (422), but the time is settled.
+     * A failed attempt (upstream, timeout, DB) may be retried: the first attempt's settlement stands, later seconds are ignored.
+     * 409 only once reported or cancelled, or while another report call for this session is running.
      */
     suspend fun report(id: UUID, seconds: Int, transcript: List<TranscriptEntry>): InterviewReport {
         val entry = session(id)
@@ -122,18 +140,30 @@ class LiveService(
             if (summary.isNullOrEmpty()) throw notFound("Dieses Gespräch gibt es nicht mehr.")
             throw alreadyReported()
         }
-        if (entry.isClaimed) throw alreadyReported()
+        if (entry.isFinal) throw alreadyReported()
         if (transcript.size > MAX_TRANSCRIPT_ENTRIES)
             throw badRequest("Das Gespräch ist zu lang für einen Bericht (höchstens $MAX_TRANSCRIPT_ENTRIES Einträge).")
         if (transcript.any { it.text.length > MAX_ENTRY_CHARS })
             throw badRequest("Ein Eintrag im Gespräch ist zu lang (höchstens $MAX_ENTRY_CHARS Zeichen).")
         if (transcript.any { it.role !in TRANSCRIPT_ROLES }) throw badRequest("Das Gespräch enthält eine unbekannte Rolle.")
         if (seconds < 0) throw badRequest("Die Gesprächsdauer ist ungültig.")
-        if (!entry.claim()) throw alreadyReported()
+        if (!entry.beginReport()) throw ApiException(HttpStatusCode.Conflict, "Conflict", "Der Bericht wird gerade erstellt.")
+        try {
+            return report(entry, seconds, transcript)
+        } finally {
+            entry.endReport()
+        }
+    }
 
-        val used = seconds.coerceAtMost(entry.reservedSeconds)
-        withContext(NonCancellable) { usage.settleLive(entry.day, entry.reservedSeconds - used) }
-        metrics.liveSeconds(used)
+    /** Runs while [entry] is in flight: settles once (a retry keeps the first settlement), then reports. */
+    private suspend fun report(entry: LiveSession, seconds: Int, transcript: List<TranscriptEntry>): InterviewReport {
+        if (entry.isFinal || !entry.claimForReport()) throw alreadyReported()
+        if (!entry.settled) {
+            val used = seconds.coerceAtMost(entry.reservedSeconds)
+            withContext(NonCancellable) { usage.settleLive(entry.day, entry.reservedSeconds - used) }
+            entry.markSettled()
+            metrics.liveSeconds(used)
+        }
 
         val lines = transcript.map { TranscriptEntry(it.role, it.text.trim()) }.filter { it.text.isNotEmpty() }
         val answers = lines.filter { it.role == "omar" }.map { it.text }
@@ -150,11 +180,15 @@ class LiveService(
 
         val now = clock.instant()
         val fallback = answers.joinToString(" ").take(300)
-        report.corrections.forEach { c ->
-            mistakes.record(NewMistake(c.category, c.wrong, c.right, c.rule, answers.firstOrNull { c.wrong in it } ?: fallback), now)
-            metrics.mistake(c.category)
+        if (!entry.mistakesRecorded) {
+            report.corrections.forEach { c ->
+                mistakes.record(NewMistake(c.category, c.wrong, c.right, c.rule, answers.firstOrNull { c.wrong in it } ?: fallback), now)
+                metrics.mistake(c.category)
+            }
+            entry.markMistakesRecorded()
         }
-        sessions.finishInterview(id, report.overall, answers.size, report.corrections.size, now)
+        sessions.finishInterview(entry.id, report.overall, answers.size, report.corrections.size, now)
+        entry.markReported()
         metrics.liveSession("reported")
         return report
     }

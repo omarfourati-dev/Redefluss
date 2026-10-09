@@ -90,8 +90,8 @@ fun interviewerInstructions(setup: LiveSetup): String = buildString {
     appendLine("Sie führen ein realistisches Vorstellungsgespräch auf Deutsch mit Herrn Fourati, der sich auf die Stelle aus der Stellenanzeige bewirbt.")
     appendLine(roleText(setup.role))
     appendLine("Das Gespräch dauert etwa ${setup.minutes} Minuten. Behalten Sie die Zeit im Blick und leiten Sie rechtzeitig zum Abschluss über. " +
-        "Beenden Sie das Gespräch spätestens nach ${setup.minutes} Minuten mit der Frage „Haben Sie noch Fragen an uns?“. " +
-        "Beantworten Sie seine Fragen danach kurz, bedanken Sie sich für das Gespräch und verabschieden Sie sich – beginnen Sie kein neues Thema.")
+        "Stellen Sie gegen Ende (spätestens nach ${setup.minutes} Minuten) die Abschlussfrage ‚Haben Sie noch Fragen an uns?‘, " +
+        "beantworten Sie seine Fragen kurz, bedanken Sie sich und verabschieden Sie sich. Beginnen Sie danach kein neues Thema.")
     appendLine("Regeln:")
     appendLine("- Siezen Sie den Kandidaten wie in einem echten Vorstellungsgespräch und sprechen Sie ihn mit „Herr Fourati“ an – nennen Sie ihn niemals „Omar“.")
     appendLine("- Sprechen Sie natürliches Hochdeutsch in normalem Tempo.")

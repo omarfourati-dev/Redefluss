@@ -98,8 +98,9 @@ class RealtimeTest {
 
     @Test fun closingAnswersQuestionsThenSaysGoodbye() {
         val text = interviewerInstructions(setup)
-        assertTrue("Beenden Sie das Gespräch spätestens nach 15 Minuten mit der Frage „Haben Sie noch Fragen an uns?“. " +
-            "Beantworten Sie seine Fragen danach kurz, bedanken Sie sich für das Gespräch und verabschieden Sie sich – beginnen Sie kein neues Thema." in text, text)
+        assertTrue("Stellen Sie gegen Ende (spätestens nach 15 Minuten) die Abschlussfrage ‚Haben Sie noch Fragen an uns?‘, " +
+            "beantworten Sie seine Fragen kurz, bedanken Sie sich und verabschieden Sie sich. Beginnen Sie danach kein neues Thema." in text, text)
+        assertFalse("Beenden Sie das Gespräch" in text, text)
     }
 
     @Test fun neutralCompanyNoInventedFactsShortTurnsGermanOnly() {

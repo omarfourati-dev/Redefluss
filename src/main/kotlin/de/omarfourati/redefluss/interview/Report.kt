@@ -17,7 +17,8 @@ import kotlinx.serialization.json.jsonObject
 @Serializable data class AnswerFeedback(val question: String, val answer: String, val feedback: String, val better: String)
 @Serializable data class InterviewReport(val overall: String, val summary: String, val strengths: List<String>,
     val improvements: List<String>, val answers: List<AnswerFeedback>, val corrections: List<Correction>)
-@Serializable data class ReportRequest(val sessionId: String = "", val seconds: Int = 0, val transcript: List<TranscriptEntry> = emptyList()) {
+/** seconds is required: a missing duration must not silently refund the whole reservation. */
+@Serializable data class ReportRequest(val sessionId: String = "", val seconds: Int, val transcript: List<TranscriptEntry> = emptyList()) {
     override fun toString(): String = "ReportRequest(sessionId=$sessionId, seconds=$seconds, transcript=${transcript.size} entries)"
 }
 
