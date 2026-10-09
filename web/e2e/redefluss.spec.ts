@@ -99,6 +99,41 @@ test('Wortschatz: words of the day, review by typing a sentence', async ({ page 
   await page.getByRole('button', { name: 'Weiter' }).click();
 });
 
+test('Vorstellungsgespräch live (Testmodus): Anzeige einfügen, zwei Fragen beantworten, Bericht, weniger Live-Minuten', async ({ page }) => {
+  await login(page);
+  const tile = page.getByRole('link', { name: /Live-Minuten heute/ });
+  const minutesLeft = async () => Number((await tile.innerText()).match(/Live-Minuten heute: (\d+)/)![1]);
+  const before = await minutesLeft();
+  await page.clock.install(); // the call is timed with Date.now: a minute passes in the test without waiting for it
+
+  await page.getByRole('link', { name: 'Interview', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Vorstellungsgespräch' })).toBeVisible();
+  await page.getByLabel('Stellenanzeige').fill('Backend-Entwickler (m/w/d) Kotlin, Ktor, PostgreSQL. Du baust APIs und betreibst sie selbst.');
+  await page.getByRole('radio', { name: '10 Minuten' }).check();
+  await page.getByRole('button', { name: 'Gespräch starten' }).click();
+
+  const subtitles = page.getByRole('log', { name: 'Untertitel' });
+  await expect(page.getByText('Testmodus', { exact: true })).toBeVisible();
+  await expect(subtitles).toContainText('Erzählen Sie mir bitte kurz etwas über sich.');
+  const answer = page.getByLabel('Antwort (Testmodus)');
+  await answer.fill('Ich bin Backend-Entwickler und baue seit Jahren APIs mit Kotlin.');
+  await page.getByRole('button', { name: 'Antwort senden' }).click();
+  await expect(subtitles).toContainText('Warum interessieren Sie sich für diese Stelle?');
+  await answer.fill('Ich möchte Systeme bauen, die ich auch selbst betreibe.');
+  await page.getByRole('button', { name: 'Antwort senden' }).click();
+  await expect(subtitles).toContainText('Wir melden uns bei Ihnen.');
+
+  await page.clock.fastForward('01:10'); // 70 s of talking: at least one live minute is used up, the rest of the 10 is given back
+  await page.getByRole('button', { name: 'Gespräch beenden' }).click();
+  await expect(page.getByRole('region', { name: 'Das lief gut' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Gesamteindruck' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Übersicht' }).click();
+  await expect(page.getByRole('heading', { name: 'Übersicht' })).toBeVisible();
+  await expect(tile).toBeVisible();
+  await expect.poll(minutesLeft).toBeLessThan(before);
+});
+
 test('installable app: manifest, service worker, no API responses in the cache, offline start', async ({ page, context, request }) => {
   const manifest = await (await request.get('/manifest.webmanifest')).json();
   expect(manifest).toMatchObject({ short_name: 'Redefluss', start_url: '/', scope: '/', display: 'standalone' });

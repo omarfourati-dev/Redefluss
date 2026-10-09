@@ -44,6 +44,7 @@ const original = { ...liveDeps };
 describe('Interview', () => {
   beforeEach(() => {
     HTMLMediaElement.prototype.pause = vi.fn();
+    HTMLMediaElement.prototype.play = vi.fn(async () => {});
   });
   afterEach(() => {
     Object.assign(liveDeps, original);
@@ -310,5 +311,84 @@ describe('Interview', () => {
     expect(calls('/api/live/report')).toHaveLength(0);
     expect(track.stop).toHaveBeenCalled();
     expect(pcs[0].close).toHaveBeenCalled();
+  });
+
+  it('closing the tab (pagehide) mid-call reports once with keepalive, the later unmount adds nothing', async () => {
+    mockApi({
+      '/api/overview': () => json(200, overview),
+      '/api/live/session': () => json(200, fakeStart),
+      '/api/live/report': () => json(200, report)
+    });
+    const { unmount } = render(Page);
+    await fillForm();
+    await fireEvent.click(screen.getByRole('button', { name: 'Gespräch starten' }));
+    await fireEvent.input(await screen.findByLabelText('Antwort (Testmodus)'), { target: { value: 'Ich bin Entwickler.' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Antwort senden' }));
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('pagehide'));
+    unmount();
+    await vi.waitFor(() => expect(calls('/api/live/report')).toHaveLength(1));
+    const init = calls('/api/live/report')[0][1] as RequestInit;
+    expect(init.keepalive).toBe(true);
+    expect(body(init).transcript).toHaveLength(3);
+    expect(calls('/api/live/cancel')).toHaveLength(0);
+  });
+
+  it('closing the tab (pagehide) without an answer cancels once with keepalive', async () => {
+    const { pcs, track } = fakeRtc();
+    mockApi({
+      '/api/overview': () => json(200, overview),
+      '/api/live/session': () => json(200, realStart),
+      '/api/live/cancel': () => new Response(null, { status: 204 })
+    });
+    const { unmount } = render(Page);
+    await fillForm();
+    await fireEvent.click(screen.getByRole('button', { name: 'Gespräch starten' }));
+    await screen.findByRole('log', { name: 'Untertitel' });
+    window.dispatchEvent(new Event('pagehide'));
+    unmount();
+    await vi.waitFor(() => expect(calls('/api/live/cancel')).toHaveLength(1));
+    expect((calls('/api/live/cancel')[0][1] as RequestInit).keepalive).toBe(true);
+    expect(calls('/api/live/report')).toHaveLength(0);
+    expect(track.stop).toHaveBeenCalled();
+    expect(pcs[0].close).toHaveBeenCalled();
+  });
+
+  it('the data channel closing mid-call ends the call and reports', async () => {
+    const { pcs } = fakeRtc();
+    mockApi({
+      '/api/overview': () => json(200, overview),
+      '/api/live/session': () => json(200, realStart),
+      '/api/live/report': () => json(200, report)
+    });
+    render(Page);
+    await fillForm();
+    await fireEvent.click(screen.getByRole('button', { name: 'Gespräch starten' }));
+    await screen.findByRole('log', { name: 'Untertitel' });
+    const dc = pcs[0].dc as unknown as { onmessage?: (e: { data: string }) => void; onclose?: () => void };
+    dc.onmessage?.({ data: JSON.stringify({ type: 'conversation.item.input_audio_transcription.completed', item_id: 'u1', transcript: 'Ich bin Entwickler.' }) });
+    dc.onclose?.();
+    expect(await screen.findByText('Gutes Gespräch mit klaren Beispielen.')).toBeInTheDocument();
+    expect(calls('/api/live/report')).toHaveLength(1);
+  });
+
+  it('a refused audio start shows a tap button that plays again and then disappears', async () => {
+    const { pcs } = fakeRtc();
+    const play = vi.fn().mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError')).mockResolvedValue(undefined);
+    HTMLMediaElement.prototype.play = play;
+    mockApi({
+      '/api/overview': () => json(200, overview),
+      '/api/live/session': () => json(200, realStart)
+    });
+    render(Page);
+    await fillForm();
+    await fireEvent.click(screen.getByRole('button', { name: 'Gespräch starten' }));
+    await screen.findByRole('log', { name: 'Untertitel' });
+    const label = 'Tippe hier, um den Ton einzuschalten';
+    expect(screen.queryByRole('button', { name: label })).toBeNull();
+    (pcs[0] as unknown as { ontrack: (e: unknown) => void }).ontrack({ streams: [{}] });
+    await fireEvent.click(await screen.findByRole('button', { name: label }));
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: label })).toBeNull());
+    expect(play).toHaveBeenCalledTimes(2);
   });
 });

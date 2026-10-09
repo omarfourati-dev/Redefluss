@@ -82,8 +82,10 @@ export interface ConnectOptions {
   audio: HTMLAudioElement | null;
   /** The whole transcript so far, after every completed transcription. */
   onTranscript: (entries: TranscriptEntry[]) => void;
-  /** The established connection failed (once). */
+  /** The established connection failed or was closed from the far side (once). */
   onFailed: () => void;
+  /** The browser refused to play the interviewer's voice without a tap; the page offers a button that calls `audio.play()` again. */
+  onAudioBlocked?: () => void;
 }
 
 export interface LiveConnection {
@@ -118,6 +120,7 @@ export async function connect(opts: ConnectOptions, deps: LiveDeps = liveDeps): 
     if (closed) return;
     closed = true;
     if (pc) pc.onconnectionstatechange = null;
+    if (dc) dc.onclose = null;
     try { dc?.close(); } catch { /* already closed */ }
     try { pc?.close(); } catch { /* already closed */ }
     stream.getTracks().forEach((t) => t.stop());
@@ -133,13 +136,25 @@ export async function connect(opts: ConnectOptions, deps: LiveDeps = liveDeps): 
       timer = deps.setTimeout(() => reject(new LiveError('failed')), CONNECT_TIMEOUT_MS);
       pc = deps.createPeerConnection();
       stream.getTracks().forEach((t) => pc!.addTrack(t, stream));
-      pc.ontrack = (e) => { if (opts.audio && !closed) opts.audio.srcObject = e.streams[0] ?? null; };
-      pc.onconnectionstatechange = () => {
-        if (pc?.connectionState !== 'failed') return;
+      pc.ontrack = (e) => {
+        if (!opts.audio || closed) return;
+        opts.audio.srcObject = e.streams[0] ?? null;
+        try {
+          Promise.resolve(opts.audio.play()).catch(() => opts.onAudioBlocked?.());
+        } catch { opts.onAudioBlocked?.(); }
+      };
+      // the connection broke or the far side hung up while we did not close: a failure (before the connect: a failed start)
+      const lost = () => {
+        if (closed) return;
         if (!connected) reject(new LiveError('failed'));
         else if (!failedOnce) { failedOnce = true; opts.onFailed(); }
       };
+      pc.onconnectionstatechange = () => {
+        const state = pc?.connectionState;
+        if (state === 'failed' || state === 'closed') lost();
+      };
       dc = pc.createDataChannel('oai-events');
+      dc.onclose = lost;
       dc.onopen = () => resolve();
       dc.onmessage = (e: MessageEvent) => {
         let event: LiveEvent;

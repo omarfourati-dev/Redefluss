@@ -34,7 +34,10 @@
   let reportBusy = $state(false);
   let audioEl = $state<HTMLAudioElement | null>(null);
 
+  let audioBlocked = $state(false);
+
   let alive = true;
+  let left = false;
   let conn: LiveConnection | null = null;
   let fake = $state.raw<FakeLive | null>(null);
   let startedAt = 0;
@@ -56,19 +59,37 @@
     } catch { /* keep the old line */ }
   }
 
-  onMount(loadMinutes);
+  onMount(() => {
+    void loadMinutes();
+    window.addEventListener('pagehide', leave);
+    return () => window.removeEventListener('pagehide', leave);
+  });
 
   onDestroy(() => {
     alive = false;
-    if (phase !== 'live' || !session) return; // while connecting, start() cleans up once connect settles
+    leave();
+  });
+
+  /** Tab closed, reload or navigation away mid-call: report (if Omar spoke) or cancel, with keepalive; once only. */
+  function leave() {
+    if (left || phase !== 'live' || !session) return; // while connecting, start() cleans up once connect settles
+    left = true;
     const s = session;
     const entries = currentTranscript();
     const seconds = elapsedSeconds();
     stopCall();
+    conn = null;
+    fake = null;
+    audioBlocked = false;
+    phase = 'done';
     if (entries.some((e) => e.role === 'omar'))
       void api('/api/live/report', { method: 'POST', json: { sessionId: s.sessionId, seconds, transcript: entries }, keepalive: true }).catch(() => {});
     else void cancel(s.sessionId);
-  });
+  }
+
+  function playAudio() {
+    void audioEl?.play().then(() => (audioBlocked = false), () => {});
+  }
 
   function cancel(sessionId: string): Promise<unknown> {
     return api('/api/live/cancel', { method: 'POST', json: { sessionId }, keepalive: true }).catch(() => {});
@@ -109,6 +130,7 @@
         clientSecret: s.clientSecret,
         model: s.model,
         audio: audioEl,
+        onAudioBlocked: () => (audioBlocked = true),
         onTranscript: (t) => (transcript = t),
         onFailed: () => void end()
       });
@@ -152,6 +174,7 @@
     stopCall();
     conn = null;
     fake = null;
+    audioBlocked = false;
     transcript = entries;
     payload = { sessionId: session.sessionId, seconds, transcript: entries };
     phase = 'reporting';
@@ -176,6 +199,7 @@
   }
 
   function again() {
+    left = false; audioBlocked = false;
     phase = 'setup'; session = null; report = null; payload = null; transcript = []; error = ''; canRetry = false;
     void loadMinutes();
   }
@@ -216,6 +240,7 @@
       <p class="text-2xl font-bold tabular-nums">{mmss(elapsed)} / {mmss(session.minutes * 60)}</p>
       {#if session.fake}<span class="rounded bg-amber-100 px-2 py-0.5 text-sm text-amber-900">Testmodus</span>{/if}
     </div>
+    {#if audioBlocked}<button type="button" class="btn-primary self-start" onclick={playAudio}>Tippe hier, um den Ton einzuschalten</button>{/if}
     {#if warn}<p role="status" class="rounded-lg bg-amber-100 p-3 font-semibold text-amber-900">Noch 1 Minute</p>{/if}
     <ol role="log" aria-label="Untertitel" aria-live="polite" class="card flex min-h-40 flex-col gap-2">
       {#each subtitles as t, i (transcript.length - subtitles.length + i)}

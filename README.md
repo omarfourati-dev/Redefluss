@@ -8,7 +8,7 @@ ein Tageszähler.**
 **Live:** https://redefluss.omarfourati.de · ein einziges Konto (der Besitzer) · installierbar als PWA.
 
 Ein Portfolio-Projekt von [Omar Fourati](https://omarfourati.de), gebaut mit **Kotlin/Ktor** und **Svelte 5**.
-Gebaut sind bisher Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht), Etappe 2 (Wortschatz) und Etappe 3 (Aussprache); die weiteren Etappen stehen unter „Ausblick“.
+Gebaut sind alle vier Etappen: Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht), Etappe 2 (Wortschatz), Etappe 3 (Aussprache) und Etappe 4 (Vorstellungsgespräch live); „Ausblick“ fasst sie zusammen.
 
 ## Datenschutz-Ablauf: eine Runde
 
@@ -69,6 +69,40 @@ Fehler-Gedächtnis. Aufnahmen werden nie gespeichert.
   `AZURE_SPEECH_KEY` und `AZURE_SPEECH_REGION` (Standard `germanywestcentral`); fehlt der Schlüssel, startet die App
   trotzdem und die Seite zeigt „Aussprache ist noch nicht eingerichtet.“
 - **Azure-Zähler:** Der F0-Zähler von Azure kann sich nach UTC-Monat zurücksetzen; ist er zu Ende, lehnt Azure einfach ab (Hinweis „ausgelastet“, HTTP 429) – es entstehen keine Kosten.
+
+## Vorstellungsgespräch live
+
+Unter „Interview“ fügst du eine Stellenanzeige ein, wählst, wer das Gespräch führt (Recruiter:in, Teamlead oder beide),
+und die Dauer (10, 15 oder 20 Minuten). Dann sprichst du in Echtzeit mit einer KI-Interviewerin (OpenAI Realtime): Sie
+stellt jeweils eine Frage, fragt bei vagen Antworten nach, mischt Verhaltens- (STAR) und Fachfragen und korrigiert dich
+während des Gesprächs nicht. Ihre Worte und deine stehen als Untertitel auf dem Bildschirm. Nach „Gespräch beenden“
+gibt es einen Bericht: Gesamteindruck, „Das lief gut“, „Daran kannst du arbeiten“, je Antwort Frage, deine Antwort,
+Feedback und eine bessere Formulierung sowie deine Sprachfehler (sie landen im Fehler-Gedächtnis). Gespeichert wird
+das Gespräch als Übungssitzung (Modus `interview`) mit dem Gesamteindruck als Zusammenfassung.
+
+- **Ablauf:** `POST /api/live/session` reserviert die Minuten und liefert ein kurzlebiges Client-Secret (60 Sekunden gültig,
+  nie geloggt). Der Browser baut damit per WebRTC direkt zu OpenAI auf (Mikrofon, Daten-Kanal `oai-events`), der
+  OpenAI-Schlüssel erreicht den Browser nie. Am Ende schickt der Browser die Transkripte an `POST /api/live/report`.
+  Klappt der Aufbau nicht (Mikrofon verweigert, OpenAI lehnt ab, 15 Sekunden ohne Verbindung), geht `POST /api/live/cancel`
+  und die Minuten werden zurückgegeben. Bricht die Verbindung mitten im Gespräch ab oder schließt du den Tab, beendet die
+  Seite das Gespräch und schickt den Bericht (mit `keepalive`); hat Omar nichts gesagt, wird abgebrochen.
+- **Kostenbremse:** `LIVE_MINUTES_PER_DAY` (Standard 30, erlaubt 0–120) pro Tag. Der Start reserviert `Minuten × 60`
+  Sekunden atomar; danach HTTP 429 („Für heute sind die Live-Minuten aufgebraucht …“). Der Bericht rechnet ab
+  (höchstens die reservierten Sekunden, der Rest wird zurückgegeben); ein Gespräch ohne Bericht behält seine Reservierung.
+  Zusätzlich beendet der Browser den Anruf spätestens zwei Minuten nach der gewählten Dauer, eine Minute vorher erscheint
+  „Noch 1 Minute“, und die Interviewerin weiß die Dauer und kommt zum Schluss. Modell und Stimme:
+  `REALTIME_MODEL` (Standard `gpt-realtime`), `REALTIME_VOICE` (Standard `marin`).
+- **Datenschutz:** Der Ton geht direkt zwischen Browser und OpenAI, nie über den Server und nie in eine Datei. Die
+  Transkripte gibt es nur für den Bericht; die Stellenanzeige wird nie gespeichert. Gespeichert werden nur Bericht-Zusammenfassung,
+  Fehler (mit Beispielsatz) und der Minuten-Zähler. Die Content-Security-Policy erlaubt dafür zusätzlich
+  `connect-src https://api.openai.com`.
+- **Ton:** Blockiert der Browser die Wiedergabe, erscheint „Tippe hier, um den Ton einzuschalten“.
+- **Lokal ohne OpenAI:** `SPEECH=fake` (Standard) startet einen Testmodus ohne WebRTC: die Fragen sind ein fester
+  Zwei-Fragen-Ablauf, du tippst die Antworten in ein Testfeld, der Bericht kommt vom Fake-Coach. Ein echtes Gespräch
+  braucht ein Mikrofon und `SPEECH=openai`.
+- **Kennzahlen:** `redefluss_live_sessions_total{outcome}` (`started`, `limit`, `upstream_error`, `reported`) und
+  `redefluss_live_seconds_total` (abgerechnete Sekunden); im Grafana-Dashboard „Live-Interviews je Ergebnis“ und
+  „Live-Minuten heute“.
 
 ## Kotlin-/Ktor-Konzepte im Projekt
 
@@ -144,7 +178,7 @@ cd web && E2E_BASE_URL=http://localhost:8080 npx playwright test   # E2E gegen d
 - Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto, Login, PWA, Service-Worker-Stempel
 - Playwright (`web/e2e/redefluss.spec.ts`): Grundlagen (`robots.txt`, `/healthz`, API nur mit Login), Satz sprechen mit
   Korrektur und Übersicht, Aussprache (Satz aufnehmen, farbige Bewertung, Laute), Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
-  Cache, Offline-Start), Abmelden
+  Cache, Offline-Start), Vorstellungsgespräch im Testmodus (Anzeige, zwei Fragen, Bericht, weniger Live-Minuten), Abmelden
 
 ## App installieren (PWA)
 
@@ -174,4 +208,4 @@ Aus dem Entwurf `docs/superpowers/specs/2026-10-08-redefluss-design.md`; jede Et
 - **Etappe 2 – Wortschatz (erledigt):** Wörter des Tages, Wiederholung nach SM-2, Karten-Ablauf, vollständige Übersicht
 - **Etappe 3 – Aussprache (erledigt):** Bewertung über Azure, ausschließlich im kostenlosen F0-Kontingent (höchstens 4,5 Stunden
   pro Monat), Laute-Anzeige, Aussprache in der Wortschatz-Wiederholung
-- **Etappe 4 – Vorstellungsgespräch live:** Echtzeit-Gespräch (Realtime/WebRTC) mit Bericht und Kostenbremse
+- **Etappe 4 – Vorstellungsgespräch live (erledigt):** Echtzeit-Gespräch (Realtime/WebRTC) mit Bericht und Kostenbremse (Tagesbudget in Minuten)

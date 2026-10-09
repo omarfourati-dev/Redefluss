@@ -5,6 +5,7 @@ class FakeDataChannel {
   readyState = 'connecting';
   onopen: ((e: Event) => void) | null = null;
   onmessage: ((e: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
   sent: string[] = [];
   constructor(public label: string) {}
   send(s: string) { this.sent.push(s); }
@@ -50,7 +51,7 @@ function setup(opts: { sdp?: () => Response; autoOpen?: boolean; mic?: () => Pro
     setTimeout: ((fn: () => void) => { timers.push(fn); return timers.length; }) as unknown as typeof setTimeout,
     clearTimeout: vi.fn() as unknown as typeof clearTimeout
   };
-  const audio = { srcObject: null as unknown, pause: vi.fn() } as unknown as HTMLAudioElement;
+  const audio = { srcObject: null as unknown, pause: vi.fn(), play: vi.fn(async () => {}) } as unknown as HTMLAudioElement;
   return { track, stream, pcs, timers, deps, audio };
 }
 
@@ -171,6 +172,65 @@ describe('live.connect', () => {
     s.pcs[0].setState('failed');
     expect(onFailed).toHaveBeenCalledTimes(1);
     conn.close();
+  });
+
+  it('plays the remote stream; a refused play() is reported so the page can offer a button', async () => {
+    const s = setup();
+    const onAudioBlocked = vi.fn();
+    const conn = await connect({ clientSecret: 'ek', model: 'm', audio: s.audio, onTranscript: vi.fn(), onFailed: vi.fn(), onAudioBlocked }, s.deps);
+    const remote = { id: 'remote' } as unknown as MediaStream;
+    s.pcs[0].ontrack?.({ streams: [remote] });
+    await Promise.resolve();
+    expect(s.audio.play).toHaveBeenCalledTimes(1);
+    expect(onAudioBlocked).not.toHaveBeenCalled();
+    (s.audio.play as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError'));
+    s.pcs[0].ontrack?.({ streams: [remote] });
+    await vi.waitFor(() => expect(onAudioBlocked).toHaveBeenCalledTimes(1));
+    conn.close();
+  });
+
+  it('the data channel closing after the connect counts as a failure (once)', async () => {
+    const s = setup();
+    const onFailed = vi.fn();
+    const conn = await connect({ clientSecret: 'ek', model: 'm', audio: s.audio, onTranscript: vi.fn(), onFailed }, s.deps);
+    s.pcs[0].dc!.onclose?.();
+    s.pcs[0].dc!.onclose?.();
+    s.pcs[0].setState('closed');
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    conn.close();
+  });
+
+  it('the connection state turning closed after the connect counts as a failure', async () => {
+    const s = setup();
+    const onFailed = vi.fn();
+    const conn = await connect({ clientSecret: 'ek', model: 'm', audio: s.audio, onTranscript: vi.fn(), onFailed }, s.deps);
+    s.pcs[0].setState('closed');
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    conn.close();
+  });
+
+  it('closing locally is not a failure, even when the close events arrive afterwards', async () => {
+    const s = setup();
+    const onFailed = vi.fn();
+    const conn = await connect({ clientSecret: 'ek', model: 'm', audio: s.audio, onTranscript: vi.fn(), onFailed }, s.deps);
+    const dc = s.pcs[0].dc!;
+    const handler = dc.onclose;
+    conn.close();
+    handler?.();
+    dc.onclose?.();
+    s.pcs[0].setState('closed');
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it('the channel closing before it ever opened is a failed start', async () => {
+    const s = setup({ autoOpen: false });
+    const p = connect({ clientSecret: 'ek', model: 'm', audio: s.audio, onTranscript: vi.fn(), onFailed: vi.fn() }, s.deps).catch((e) => e);
+    await vi.waitFor(() => expect(s.pcs[0]?.remote).not.toBeNull());
+    s.pcs[0].dc!.onclose?.();
+    const err = await p;
+    expect(err).toBeInstanceOf(LiveError);
+    expect(err.kind).toBe('failed');
+    expect(s.track.stop).toHaveBeenCalled();
   });
 
   it('mic denied: a denied LiveError and no peer connection', async () => {
