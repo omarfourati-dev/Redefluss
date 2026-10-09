@@ -164,6 +164,9 @@
           <p class="text-sm"><span aria-hidden="true">💬</span> Besser: <em>{result.better}</em></p>
         {/if}
         <p class="text-sm text-slate-500">{nextReview(result.intervalDays)}</p>
+        {#if current.example.trim()}
+          <a href="/aussprache?card={current.id}" class="text-sm underline">Beispielsatz nachsprechen</a>
+        {/if}
         <button type="button" class="btn-primary mt-2" disabled={busy} onclick={next}>Weiter</button>
       </section>
     {:else}

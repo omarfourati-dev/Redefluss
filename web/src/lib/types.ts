@@ -31,6 +31,8 @@ export interface Overview {
   turnsLeft: number;
   topMistakes: Mistake[];
   vocabDue: number;
+  azureSecondsLeft: number;
+  pronunciationEnabled: boolean;
 }
 export interface Card {
   id: number;
@@ -62,4 +64,47 @@ export interface ReviewResponse {
   nextDue: string;
   intervalDays: number;
   dueCount: number;
+}
+export interface Quota {
+  enabled: boolean;
+  secondsLeft: number;
+  secondsPerMonth: number;
+  todayLeft: number;
+}
+export interface Exercise {
+  /** `mistake-{n}`, `card-{id}` or `sound-{n}` */
+  id: string;
+  source: string;
+  text: string;
+  hint: string;
+}
+export interface Exercises {
+  enabled: boolean;
+  quota: Quota;
+  groups: { mistakes: Exercise[]; vocab: Exercise[]; sounds: Exercise[] };
+}
+export interface PhonemeScore {
+  phoneme: string;
+  score: number;
+}
+export interface WordScore {
+  word: string;
+  /** 0–100 */
+  score: number;
+  /** None, Mispronunciation, Omission, Insertion, … */
+  errorType: string;
+  phonemes: PhonemeScore[];
+}
+export interface Assessment {
+  recognized: string;
+  accuracy: number;
+  fluency: number;
+  completeness: number;
+  pronunciation: number;
+  words: WordScore[];
+}
+export interface AssessResponse {
+  assessment: Assessment;
+  quota: Quota;
+  weakWords: string[];
 }

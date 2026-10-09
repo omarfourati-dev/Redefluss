@@ -2,6 +2,7 @@
 	import { api } from '#lib/api';
 	import type { Overview } from '#lib/types';
 	import { CATEGORY_LABEL } from '#lib/categories';
+	import { hoursMinutes } from '#lib/quota';
 
 	let data = $state<Overview | null>(null);
 	let error = $state('');
@@ -33,6 +34,14 @@
 	<a href="/wortschatz" class="card mt-3 flex items-center justify-between hover:border-brand-700">
 		<span class="font-semibold">Fällige Karten: {data.vocabDue}</span>
 		<span class="text-sm text-brand-700">Wortschatz →</span>
+	</a>
+	<a href="/aussprache" class="card mt-3 flex items-center justify-between hover:border-brand-700">
+		<span class="font-semibold"
+			>{data.pronunciationEnabled
+				? `Aussprache: noch ${hoursMinutes(data.azureSecondsLeft)} diesen Monat`
+				: 'Aussprache: noch nicht eingerichtet'}</span
+		>
+		<span class="text-sm text-brand-700">Aussprache →</span>
 	</a>
 	<section class="mt-8">
 		<h2 class="mb-3 text-lg font-semibold">Deine häufigsten Fehler</h2>

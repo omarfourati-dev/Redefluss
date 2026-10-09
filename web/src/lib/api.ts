@@ -30,9 +30,12 @@ export async function api<T>(
 	}
 }
 
-/** Binary GET (e.g. audio) with the same auth and error handling as {@link api}. */
-export async function apiBlob(path: string): Promise<Blob> {
-	return (await request(path, {}, '*/*')).blob();
+/** Binary response (e.g. audio) with the same auth and error handling as {@link api}; GET unless `init` says otherwise. */
+export async function apiBlob(
+	path: string,
+	init: RequestInit & { json?: unknown } = {}
+): Promise<Blob> {
+	return (await request(path, init, '*/*')).blob();
 }
 
 async function request(

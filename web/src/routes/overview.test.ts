@@ -14,6 +14,8 @@ describe('Übersicht', () => {
 						turnsToday: 20,
 						turnsLeft: 280,
 						vocabDue: 5,
+						azureSecondsLeft: 3 * 3600 + 12 * 60,
+						pronunciationEnabled: true,
 						topMistakes: [
 							{
 								id: 1,
@@ -45,6 +47,9 @@ describe('Übersicht', () => {
 			'href',
 			'/wortschatz'
 		);
+		expect(
+			screen.getByRole('link', { name: /Aussprache: noch 3 h 12 min diesen Monat/ })
+		).toHaveAttribute('href', '/aussprache');
 	});
 
 	it('first day: no streak, no mistakes yet', async () => {
@@ -57,6 +62,8 @@ describe('Übersicht', () => {
 						turnsToday: 0,
 						turnsLeft: 300,
 						vocabDue: 0,
+						azureSecondsLeft: 16200,
+						pronunciationEnabled: false,
 						topMistakes: []
 					}),
 					{ status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -65,5 +72,7 @@ describe('Übersicht', () => {
 		render(Page);
 		expect(await screen.findByText(/Noch keine Fehler gesammelt/)).toBeInTheDocument();
 		expect(screen.getByText('0 Tage')).toBeInTheDocument();
+		expect(screen.getByText('Aussprache: noch nicht eingerichtet')).toBeInTheDocument();
+		expect(screen.queryByText(/diesen Monat/)).toBeNull();
 	});
 });

@@ -61,6 +61,12 @@ describe('Recorder', () => {
     await vi.waitFor(() => expect(onAuto).toHaveBeenCalledWith(expect.any(Blob)));
   });
 
+  it('accepts a shorter maximum (pronunciation: 30 s)', async () => {
+    const e = env();
+    await new Recorder(e, undefined, 30_000).start();
+    expect(e.setTimeout).toHaveBeenCalledWith(expect.any(Function), 30_000);
+  });
+
   it('denied permission throws MicDeniedError', async () => {
     const e = env({ getUserMedia: vi.fn(async () => { throw new DOMException('no', 'NotAllowedError'); }) });
     await expect(new Recorder(e).start()).rejects.toBeInstanceOf(MicDeniedError);

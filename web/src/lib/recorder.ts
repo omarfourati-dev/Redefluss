@@ -33,7 +33,7 @@ const browserEnv = (): RecorderEnv => ({
   clearTimeout: globalThis.clearTimeout.bind(globalThis)
 });
 
-/** Hold-to-talk recording: start on press, stop on release; too-short taps give null, 60 s stop automatically. */
+/** Hold-to-talk recording: start on press, stop on release; too-short taps give null, `maxMs` (default 60 s) stops automatically. */
 export class Recorder {
   private rec: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
@@ -43,7 +43,8 @@ export class Recorder {
 
   constructor(
     private env: RecorderEnv = browserEnv(),
-    private onAutoStop?: (blob: Blob | null) => void
+    private onAutoStop?: (blob: Blob | null) => void,
+    private maxMs: number = MAX_MS
   ) {}
 
   get recording() {
@@ -90,7 +91,7 @@ export class Recorder {
     this.startedAt = this.env.now();
     this.timer = this.env.setTimeout(() => {
       void this.stop().then((b) => this.onAutoStop?.(b));
-    }, MAX_MS);
+    }, this.maxMs);
   }
 
   stop(): Promise<Blob | null> {
@@ -126,5 +127,5 @@ export class Recorder {
 
 /** Swappable in tests. */
 export const recorderFactory = {
-  create: (onAutoStop?: (blob: Blob | null) => void): Recorder => new Recorder(undefined, onAutoStop)
+  create: (onAutoStop?: (blob: Blob | null) => void, maxMs?: number): Recorder => new Recorder(undefined, onAutoStop, maxMs)
 };

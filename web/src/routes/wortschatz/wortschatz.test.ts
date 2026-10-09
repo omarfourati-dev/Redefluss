@@ -119,6 +119,7 @@ describe('Wortschatz', () => {
     expect(screen.getByText('hat lange gedauert')).toBeInTheDocument();
     expect(screen.getByText('Die Besprechung hat lange gedauert.')).toBeInTheDocument();
     expect(screen.getByText('Nächste Wiederholung morgen')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Beispielsatz nachsprechen' })).toHaveAttribute('href', '/aussprache?card=1');
     const [url, init] = reviewCalls()[0];
     expect(url).toBe('/api/vocab/cards/1/review');
     expect(init.method).toBe('POST');
@@ -126,6 +127,7 @@ describe('Wortschatz', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Weiter' }));
     expect(await screen.findByText('Termin')).toBeInTheDocument();
     expect(screen.queryByText('Gut benutzt!')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Beispielsatz nachsprechen' })).toBeNull();
   });
 
   it('says "in N Tagen" for longer intervals', async () => {

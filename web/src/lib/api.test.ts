@@ -126,4 +126,15 @@ describe('api', () => {
 		deps.fetch = vi.fn(async () => res(404, { status: 404, detail: 'Karte nicht gefunden.' }, 'application/problem+json'));
 		await expect(apiBlob('/api/vocab/cards/8/audio')).rejects.toMatchObject({ status: 404, message: 'Karte nicht gefunden.' });
 	});
+	it('apiBlob can POST JSON (e.g. speak a sentence)', async () => {
+		auth.set('tok', 'a@b.de');
+		deps.fetch = vi.fn(async () => new Response('mp3', { status: 200, headers: { 'Content-Type': 'audio/mpeg' } }));
+		const blob = await apiBlob('/api/pronunciation/speak', { method: 'POST', json: { text: 'Hallo', slow: true } });
+		expect(blob.size).toBe(3);
+		const [, init] = (deps.fetch as any).mock.calls[0];
+		expect(init.method).toBe('POST');
+		expect(init.headers['Content-Type']).toBe('application/json');
+		expect(init.headers.Authorization).toBe('Bearer tok');
+		expect(JSON.parse(init.body)).toEqual({ text: 'Hallo', slow: true });
+	});
 });

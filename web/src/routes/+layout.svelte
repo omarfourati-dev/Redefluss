@@ -25,6 +25,7 @@
 		{ href: '/', label: 'Übersicht' },
 		{ href: '/gespraech', label: 'Gespräch' },
 		{ href: '/wortschatz', label: 'Wortschatz' },
+		{ href: '/aussprache', label: 'Aussprache' },
 		{ href: '/fehler', label: 'Fehler' },
 		{ href: '/konto', label: 'Konto' }
 	];

@@ -16,11 +16,13 @@ export const TALK_TEXT = {
 export type TalkErrorKind = 'denied' | 'unavailable' | 'failed' | 'short';
 
 export interface TalkOptions {
-  /** A finished recording (released or auto-stopped after 60 s). */
+  /** A finished recording (released or auto-stopped after `maxMs`). */
   onBlob: (blob: Blob) => void;
   onError: (message: string, kind: TalkErrorKind) => void;
   /** A friendly hint (show it with role="status"), e.g. after the permission prompt. */
   onInfo?: (message: string) => void;
+  /** Automatic stop; the recorder's default (60 s) when omitted. */
+  maxMs?: number;
 }
 
 export interface Talk {
@@ -60,7 +62,7 @@ export function createTalk(opts: TalkOptions): Talk {
   async function press() {
     if (recorder || pressed) return;
     pressed = true;
-    const r = recorderFactory.create((blob) => { if (recorder === r) finish(blob); });
+    const r = recorderFactory.create((blob) => { if (recorder === r) finish(blob); }, opts.maxMs);
     recorder = r;
     const t0 = performance.now();
     try {
