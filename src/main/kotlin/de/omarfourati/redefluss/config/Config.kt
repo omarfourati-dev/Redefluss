@@ -20,6 +20,11 @@ data class Config(
     val turnsPerDay: Int,
     val vocabPerDay: Int,
     val vocabReviewsPerDay: Int,
+    val pronunciation: String,
+    val azureKey: String?,
+    val azureRegion: String,
+    val azureSecondsPerMonth: Int,
+    val pronunciationsPerDay: Int,
 ) {
     companion object {
         fun from(env: Map<String, String>): Config {
@@ -32,6 +37,8 @@ data class Config(
             if (speech !in setOf("openai", "fake")) throw ConfigException("SPEECH must be openai or fake")
             val key = opt("OPENAI_API_KEY")?.takeIf { it != "not-configured" }
             if (speech == "openai" && key == null) throw ConfigException("OPENAI_API_KEY is required for SPEECH=openai")
+            val pronunciation = opt("PRONUNCIATION") ?: if (speech == "fake") "fake" else "azure"
+            if (pronunciation !in setOf("azure", "fake")) throw ConfigException("PRONUNCIATION must be azure or fake")
             val jwt = req("JWT_SECRET")
             if (jwt.length < 32) throw ConfigException("JWT_SECRET must have at least 32 characters")
 
@@ -53,6 +60,11 @@ data class Config(
                 turnsPerDay = int("TURNS_PER_DAY", 300),
                 vocabPerDay = int("VOCAB_PER_DAY", 7).coerceIn(5, 10),
                 vocabReviewsPerDay = int("VOCAB_REVIEWS_PER_DAY", 60),
+                pronunciation = pronunciation,
+                azureKey = opt("AZURE_SPEECH_KEY"),
+                azureRegion = opt("AZURE_SPEECH_REGION") ?: "germanywestcentral",
+                azureSecondsPerMonth = int("AZURE_SECONDS_PER_MONTH", 16200),
+                pronunciationsPerDay = int("PRONUNCIATIONS_PER_DAY", 100),
             )
         }
     }

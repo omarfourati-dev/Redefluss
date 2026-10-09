@@ -51,6 +51,24 @@ class ConfigTest {
         assertFailsWith<ConfigException> { Config.from(base + ("TURNS_PER_DAY" to "viele")) }
     }
 
+    @Test fun pronunciationDefaults() {
+        val c = Config.from(base)
+        assertEquals("fake", c.pronunciation)
+        assertEquals("germanywestcentral", c.azureRegion)
+        assertEquals(16200, c.azureSecondsPerMonth)
+        assertEquals(100, c.pronunciationsPerDay)
+        assertNull(c.azureKey)
+        assertEquals("azure", Config.from(base + mapOf("SPEECH" to "openai", "OPENAI_API_KEY" to "sk-test")).pronunciation)
+    }
+
+    @Test fun azurePronunciationWithoutKeyIsAllowed() {
+        val c = Config.from(base + ("PRONUNCIATION" to "azure"))
+        assertEquals("azure", c.pronunciation)
+        assertNull(c.azureKey)
+        assertEquals("k1", Config.from(base + mapOf("PRONUNCIATION" to "azure", "AZURE_SPEECH_KEY" to " k1 ")).azureKey)
+        assertFailsWith<ConfigException> { Config.from(base + ("PRONUNCIATION" to "google")) }
+    }
+
     @Test fun vocabPerDayIsClamped() {
         assertEquals(10, Config.from(base + ("VOCAB_PER_DAY" to "20")).vocabPerDay)
         assertEquals(5, Config.from(base + ("VOCAB_PER_DAY" to "2")).vocabPerDay)
