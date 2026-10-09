@@ -4,8 +4,7 @@ import io.ktor.client.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*
 import io.ktor.http.content.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import kotlin.test.*
 
@@ -107,5 +106,33 @@ class OpenAiTest {
         assertEquals(6, c.corrections.size)
         assertEquals("Natürlich.", c.natural)
         assertEquals("Antwort", c.reply)
+    }
+
+    @Test fun callerCancellationIsNotWrapped() = runBlocking {
+        val t = OpenAiTranscriber(client(HttpStatusCode.OK to """{"text":"x"}""", delayMs = 5000), "sk", "m")
+        val job = launch { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
+        delay(50)
+        job.cancel()
+        job.join()
+        assertTrue(job.isCancelled)
+        // a cancelled child must not surface as UpstreamException
+        val failing = async { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
+        delay(50)
+        failing.cancel()
+        val e = runCatching { failing.await() }.exceptionOrNull()
+        assertTrue(e is CancellationException && e !is UpstreamException, e.toString())
+    }
+
+    @Test fun oversizedResponseIsRejected() = runBlocking {
+        val t = OpenAiTranscriber(client(HttpStatusCode.OK to "x".repeat(1_000_001)), "sk", "m")
+        assertFailsWith<UpstreamException> { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
+        Unit
+    }
+
+    @Test fun longKnownMistakesAreTruncated() = runBlocking {
+        val coach = OpenAiCoach(client(HttpStatusCode.OK to chat(good)), "sk", "gpt-4o-mini")
+        coach.respond(CoachInput("Hallo", "", emptyList(), listOf(KnownMistake("a".repeat(500), "b".repeat(500), "kasus"))))
+        val body = requests.single().second
+        assertTrue("a".repeat(120) in body && "a".repeat(121) !in body && "b".repeat(121) !in body)
     }
 }

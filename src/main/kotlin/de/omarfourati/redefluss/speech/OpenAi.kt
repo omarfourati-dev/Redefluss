@@ -5,8 +5,8 @@ import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.*
 
 private const val BASE = "https://api.openai.com/v1"
@@ -21,11 +21,11 @@ fun fileNameFor(contentType: String): String = "audio." + when (contentType.subs
 }
 
 /** Runs one upstream call with a timeout; any failure becomes an UpstreamException without details. */
-private suspend fun <T> upstream(stage: String, timeoutMs: Long, block: suspend () -> T): T = try {
-    withTimeout(timeoutMs) { block() }
-} catch (e: TimeoutCancellationException) {
-    throw UpstreamException(stage, timeout = true)
+private suspend fun <T : Any> upstream(stage: String, timeoutMs: Long, block: suspend () -> T): T = try {
+    withTimeoutOrNull(timeoutMs) { block() } ?: throw UpstreamException(stage, timeout = true)
 } catch (e: UpstreamException) {
+    throw e
+} catch (e: CancellationException) {
     throw e
 } catch (e: Exception) {
     throw UpstreamException(stage, timeout = false)
@@ -33,6 +33,8 @@ private suspend fun <T> upstream(stage: String, timeoutMs: Long, block: suspend 
 
 private suspend fun HttpResponse.okBytes(stage: String, max: Int): ByteArray {
     if (!status.isSuccess()) throw UpstreamException(stage, timeout = false)
+    val declared = headers[HttpHeaders.ContentLength]?.toLongOrNull()
+    if (declared != null && declared > max) throw UpstreamException(stage, timeout = false)
     val bytes = bodyAsBytes()
     if (bytes.size > max) throw UpstreamException(stage, timeout = false)
     return bytes
@@ -109,7 +111,7 @@ class OpenAiCoach(private val http: HttpClient, private val key: String, private
             appendLine("3. reply: deine Antwort als Gesprächspartner, 1–3 kurze Sätze, natürliches Hochdeutsch, mit einer Rückfrage, damit das Gespräch weiterläuft. Baue ab und zu ein nützliches Wort oder eine Redewendung ein.")
             if (input.known.isNotEmpty()) {
                 appendLine("Omars häufige Fehler (achte besonders darauf und gib ihm Gelegenheiten, es richtig zu machen):")
-                input.known.forEach { appendLine("- „${it.wrong}“ → „${it.right}“ (${it.category})") }
+                input.known.forEach { appendLine("- „${it.wrong.take(120)}“ → „${it.right.take(120)}“ (${it.category})") }
             }
         }
     }
