@@ -7,6 +7,7 @@ import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.interview.LiveService
+import de.omarfourati.redefluss.interview.reporterFor
 import de.omarfourati.redefluss.interview.realtimeFor
 import de.omarfourati.redefluss.overview.OverviewService
 import de.omarfourati.redefluss.pronunciation.PronunciationService
@@ -52,7 +53,7 @@ fun main() {
     runBlocking { pronunciation.refreshGauge() }
     val overview = OverviewService(UsageRepo(db), SessionRepo(db), MistakeRepo(db), vocabRepo, config, clock, pronunciation.enabled)
     val vocab = VocabService(vocabRepo, MistakeRepo(db), UsageRepo(db), vocabAiFor(config, http), speech, metrics, config, clock)
-    val live = LiveService(realtimeFor(config, http), SessionRepo(db), MistakeRepo(db), UsageRepo(db), metrics, config, clock)
+    val live = LiveService(realtimeFor(config, http), reporterFor(config, http), SessionRepo(db), MistakeRepo(db), UsageRepo(db), metrics, config, clock)
     val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation, overview, vocab, pronunciation, live)
     embeddedServer(Netty, port = config.port) { redefluss(deps) }.start(wait = true)
 }

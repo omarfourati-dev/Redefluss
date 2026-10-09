@@ -7,6 +7,8 @@ import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.interview.FakeRealtime
+import de.omarfourati.redefluss.interview.FakeReporter
+import de.omarfourati.redefluss.interview.InterviewReporter
 import de.omarfourati.redefluss.interview.LiveService
 import de.omarfourati.redefluss.interview.RealtimeSessions
 import de.omarfourati.redefluss.overview.OverviewService
@@ -45,6 +47,7 @@ fun testDeps(
     // Same selection as production (fake / azure / disabled); the HTTP client never reaches the network.
     scorer: PronunciationScorer? = scorerFor(config, { HttpClient(MockEngine { error("no network in tests") }) }) {},
     realtime: RealtimeSessions = FakeRealtime(),
+    reporter: InterviewReporter = FakeReporter(),
 ): Deps {
     val database = db ?: TestDb.db
     val users = UserRepo(database)
@@ -55,5 +58,5 @@ fun testDeps(
         overview = OverviewService(UsageRepo(database), SessionRepo(database), MistakeRepo(database), VocabRepo(database), config, clock, pronunciation.enabled),
         vocab = VocabService(VocabRepo(database), MistakeRepo(database), UsageRepo(database), vocabAi, speech, metrics, config, clock),
         pronunciation = pronunciation,
-        live = LiveService(realtime, SessionRepo(database), MistakeRepo(database), UsageRepo(database), metrics, config, clock))
+        live = LiveService(realtime, reporter, SessionRepo(database), MistakeRepo(database), UsageRepo(database), metrics, config, clock))
 }

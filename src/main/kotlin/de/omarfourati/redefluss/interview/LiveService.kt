@@ -3,6 +3,7 @@ package de.omarfourati.redefluss.interview
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.toApiException
 import de.omarfourati.redefluss.db.MistakeRepo
+import de.omarfourati.redefluss.db.NewMistake
 import de.omarfourati.redefluss.db.SessionRepo
 import de.omarfourati.redefluss.db.UsageRepo
 import de.omarfourati.redefluss.http.ApiException
@@ -29,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 @Serializable data class CancelRequest(val sessionId: String = "")
 
 const val MAX_JOB_AD = 6000
+const val MAX_TRANSCRIPT_ENTRIES = 200
+const val MAX_ENTRY_CHARS = 2000
+private val TRANSCRIPT_ROLES = setOf("interviewer", "omar")
 val LIVE_MINUTES = setOf(10, 15, 20)
 private const val CACHE_SIZE = 20
 
@@ -39,11 +43,13 @@ private const val CACHE_SIZE = 20
 class LiveSession(val id: UUID, val day: LocalDate, val reservedSeconds: Int, val jobAd: String, val role: InterviewRole, val minutes: Int) {
     private val claimed = AtomicBoolean(false)
     fun claim(): Boolean = claimed.compareAndSet(false, true)
+    /** Already reported or cancelled (a peek; only [claim] decides). */
+    val isClaimed: Boolean get() = claimed.get()
     override fun toString(): String = "LiveSession(id=$id, day=$day, reservedSeconds=$reservedSeconds, role=$role, minutes=$minutes)"
 }
 
 class LiveService(
-    private val realtime: RealtimeSessions, private val sessions: SessionRepo, private val mistakes: MistakeRepo,
+    private val realtime: RealtimeSessions, private val reporter: InterviewReporter, private val sessions: SessionRepo, private val mistakes: MistakeRepo,
     private val usage: UsageRepo, private val metrics: Metrics, private val config: Config, private val clock: Clock,
 ) {
     private val cache = object : LinkedHashMap<UUID, LiveSession>(CACHE_SIZE + 1, 0.75f, false) {
@@ -80,7 +86,8 @@ class LiveService(
         } catch (e: Exception) {
             // The browser never got a session: give the reservation back (also when the client went away meanwhile).
             withContext(NonCancellable) {
-                usage.settleLive(day, seconds)
+                // A database error here must not mask the original failure.
+                runCatching { usage.settleLive(day, seconds) }
                 id?.let { runCatching { sessions.markCancelled(it) } }
             }
             if (e is UpstreamException) {
@@ -102,6 +109,57 @@ class LiveService(
             }
         }
     }
+
+    /**
+     * Settles the reservation (used = min(seconds, reserved), the rest is given back), then asks the coach for the report,
+     * records its corrections as mistakes and stores the one-sentence verdict as the session summary.
+     * Only completed, non-blank transcript entries count; without anything from Omar there is no report (422), but the time is settled.
+     */
+    suspend fun report(id: UUID, seconds: Int, transcript: List<TranscriptEntry>): InterviewReport {
+        val entry = session(id)
+        if (entry == null) {
+            val summary = if (sessions.mode(id) == "interview") sessions.summary(id) else null
+            if (summary.isNullOrEmpty()) throw notFound("Dieses Gespräch gibt es nicht mehr.")
+            throw alreadyReported()
+        }
+        if (entry.isClaimed) throw alreadyReported()
+        if (transcript.size > MAX_TRANSCRIPT_ENTRIES)
+            throw badRequest("Das Gespräch ist zu lang für einen Bericht (höchstens $MAX_TRANSCRIPT_ENTRIES Einträge).")
+        if (transcript.any { it.text.length > MAX_ENTRY_CHARS })
+            throw badRequest("Ein Eintrag im Gespräch ist zu lang (höchstens $MAX_ENTRY_CHARS Zeichen).")
+        if (transcript.any { it.role !in TRANSCRIPT_ROLES }) throw badRequest("Das Gespräch enthält eine unbekannte Rolle.")
+        if (seconds < 0) throw badRequest("Die Gesprächsdauer ist ungültig.")
+        if (!entry.claim()) throw alreadyReported()
+
+        val used = seconds.coerceAtMost(entry.reservedSeconds)
+        withContext(NonCancellable) { usage.settleLive(entry.day, entry.reservedSeconds - used) }
+        metrics.liveSeconds(used)
+
+        val lines = transcript.map { TranscriptEntry(it.role, it.text.trim()) }.filter { it.text.isNotEmpty() }
+        val answers = lines.filter { it.role == "omar" }.map { it.text }
+        if (answers.isEmpty())
+            throw ApiException(HttpStatusCode.UnprocessableEntity, "Unprocessable Content",
+                "Im Gespräch war nichts von dir zu hören – deshalb gibt es keinen Bericht.")
+
+        val report = try {
+            metrics.timed("interview_report") { reporter.report(entry.jobAd, entry.role, lines) }
+        } catch (e: UpstreamException) {
+            metrics.liveSession("upstream_error")
+            throw e.toApiException()
+        }
+
+        val now = clock.instant()
+        val fallback = answers.joinToString(" ").take(300)
+        report.corrections.forEach { c ->
+            mistakes.record(NewMistake(c.category, c.wrong, c.right, c.rule, answers.firstOrNull { c.wrong in it } ?: fallback), now)
+            metrics.mistake(c.category)
+        }
+        sessions.finishInterview(id, report.overall, answers.size, report.corrections.size, now)
+        metrics.liveSession("reported")
+        return report
+    }
+
+    private fun alreadyReported() = ApiException(HttpStatusCode.Conflict, "Conflict", "Dieses Gespräch ist schon ausgewertet.")
 
     private fun topic(jobAd: String): String =
         jobAd.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty().take(80)

@@ -75,13 +75,39 @@ class RealtimeTest {
         assertTrue("Haben Sie noch Fragen an uns?" in text)
         assertTrue("du muss" in text && "du musst" in text)
         assertTrue("KERAVONOS" in text && "18b" in text && "München" in text)
-        assertTrue("nicht" in text && "korrigier" in text)
+        assertTrue("- Korrigieren Sie Herrn Fouratis Deutsch während des Gesprächs nicht und erwähnen Sie keine Sprachfehler – die Auswertung kommt danach." in text, text)
         val lead = interviewerInstructions(setup.copy(role = InterviewRole.teamlead))
         assertTrue("technische Teamleitung" in lead)
         assertFalse("Sie sind Recruiterin" in lead)
         val mix = interviewerInstructions(setup.copy(role = InterviewRole.mix, minutes = 20))
         assertTrue("Recruiterin" in mix && "Teamleitung" in mix && "20 Minuten" in mix)
         assertFalse("du muss" in interviewerInstructions(setup.copy(knownMistakes = emptyList())))
+    }
+
+    @Test fun interviewerSaysHerrFouratiNeverOmar() {
+        for (role in InterviewRole.entries) {
+            val text = interviewerInstructions(setup.copy(role = role))
+            assertTrue("- Siezen Sie den Kandidaten wie in einem echten Vorstellungsgespräch und sprechen Sie ihn mit „Herr Fourati“ an – nennen Sie ihn niemals „Omar“." in text, text)
+            // „Omar“ appears only in the profile's full name and in the rule forbidding it, nowhere as a form of address.
+            val withOmar = text.lines().filter { "Omar" in it }
+            assertEquals(2, withOmar.size, withOmar.joinToString("\n"))
+            assertTrue(withOmar.any { it.startsWith("Profil: Herr Omar Fourati ist") }, withOmar.joinToString("\n"))
+            assertTrue(withOmar.any { "niemals „Omar“" in it }, withOmar.joinToString("\n"))
+        }
+    }
+
+    @Test fun closingAnswersQuestionsThenSaysGoodbye() {
+        val text = interviewerInstructions(setup)
+        assertTrue("Beenden Sie das Gespräch spätestens nach 15 Minuten mit der Frage „Haben Sie noch Fragen an uns?“. " +
+            "Beantworten Sie seine Fragen danach kurz, bedanken Sie sich für das Gespräch und verabschieden Sie sich – beginnen Sie kein neues Thema." in text, text)
+    }
+
+    @Test fun neutralCompanyNoInventedFactsShortTurnsGermanOnly() {
+        val text = interviewerInstructions(setup)
+        assertTrue("- Nennt die Stellenanzeige kein Unternehmen, verwenden Sie eine neutrale Beschreibung wie „unser Unternehmen“. " +
+            "Erfinden Sie keine Fakten über das Unternehmen oder die Stelle, die nicht in der Stellenanzeige stehen." in text, text)
+        assertTrue("- Halten Sie Ihre eigenen Wortbeiträge kurz: 1–3 Sätze, keine Monologe." in text, text)
+        assertTrue("- Sprechen Sie immer Deutsch, auch wenn Herr Fourati in eine andere Sprache wechselt." in text, text)
     }
 
     @Test fun longKnownMistakesAreTruncated() {

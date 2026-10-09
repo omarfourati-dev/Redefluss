@@ -25,5 +25,10 @@ fun Route.liveRoutes(service: LiveService) {
             service.cancel(id)
             call.respond(HttpStatusCode.NoContent)
         }
+        post("/api/live/report") {
+            val req = runCatching { call.receive<ReportRequest>() }.getOrElse { throw badRequest("Die Anfrage ist ungültig.") }
+            val id = runCatching { UUID.fromString(req.sessionId) }.getOrNull() ?: throw badRequest("sessionId fehlt oder ist ungültig.")
+            call.respond(service.report(id, req.seconds, req.transcript))
+        }
     }
 }
