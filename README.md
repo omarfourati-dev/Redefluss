@@ -85,15 +85,18 @@ das Gespräch als Übungssitzung (Modus `interview`) mit dem Gesamteindruck als 
   OpenAI-Schlüssel erreicht den Browser nie. Am Ende schickt der Browser die Transkripte an `POST /api/live/report`.
   Klappt der Aufbau nicht (Mikrofon verweigert, OpenAI lehnt ab, 15 Sekunden ohne Verbindung), geht `POST /api/live/cancel`
   und die Minuten werden zurückgegeben. Bricht die Verbindung mitten im Gespräch ab oder schließt du den Tab, beendet die
-  Seite das Gespräch und schickt den Bericht (mit `keepalive`); hat Omar nichts gesagt, wird abgebrochen.
+  Seite das Gespräch und schickt immer den Bericht (mit `keepalive`); der Server rechnet die Sekunden ab, auch wenn Omar nichts
+  gesagt hat (dann 422 ohne Bericht). Eine Rückgabe per Abbruch gibt es nur in den ersten 90 Sekunden nach dem Start.
 - **Kostenbremse:** `LIVE_MINUTES_PER_DAY` (Standard 30, erlaubt 0–120) pro Tag. Der Start reserviert `Minuten × 60`
-  Sekunden atomar; danach HTTP 429 („Für heute sind die Live-Minuten aufgebraucht …“). Der Bericht rechnet ab
-  (höchstens die reservierten Sekunden, der Rest wird zurückgegeben); ein Gespräch ohne Bericht behält seine Reservierung.
-  Zusätzlich beendet der Browser den Anruf spätestens zwei Minuten nach der gewählten Dauer, eine Minute vorher erscheint
+  Sekunden atomar; danach HTTP 429 („Für heute sind die Live-Minuten aufgebraucht …“). Der Bericht rechnet die tatsächlichen
+  Sekunden ab, höchstens `(Minuten + 2) × 60`: weniger als reserviert wird zurückgegeben, mehr wird nachberechnet, sodass die
+  Abrechnung das Tagesbudget um bis zu 2 Minuten überschreiten kann. Ein Gespräch ohne Bericht behält seine Reservierung.
+  Der harte Stopp läuft im Browser: Er beendet den Anruf spätestens zwei Minuten nach der gewählten Dauer. Ein manipulierter
+  Client ist nur durch die maximale Realtime-Sitzungsdauer von OpenAI begrenzt. Eine Minute vor Ende erscheint
   „Noch 1 Minute“, und die Interviewerin weiß die Dauer und kommt zum Schluss. Modell und Stimme:
   `REALTIME_MODEL` (Standard `gpt-realtime`), `REALTIME_VOICE` (Standard `marin`).
 - **Datenschutz:** Der Ton geht direkt zwischen Browser und OpenAI, nie über den Server und nie in eine Datei. Die
-  Transkripte gibt es nur für den Bericht; die Stellenanzeige wird nie gespeichert. Gespeichert werden nur Bericht-Zusammenfassung,
+  Transkripte gibt es nur für den Bericht; von der Stellenanzeige wird nur die erste Zeile (höchstens 80 Zeichen) als Thema gespeichert, der Rest nie. Gespeichert werden nur Bericht-Zusammenfassung,
   Fehler (mit Beispielsatz) und der Minuten-Zähler. Die Content-Security-Policy erlaubt dafür zusätzlich
   `connect-src https://api.openai.com`.
 - **Ton:** Blockiert der Browser die Wiedergabe, erscheint „Tippe hier, um den Ton einzuschalten“.
@@ -178,7 +181,8 @@ cd web && E2E_BASE_URL=http://localhost:8080 npx playwright test   # E2E gegen d
 - Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto, Login, PWA, Service-Worker-Stempel
 - Playwright (`web/e2e/redefluss.spec.ts`): Grundlagen (`robots.txt`, `/healthz`, API nur mit Login), Satz sprechen mit
   Korrektur und Übersicht, Aussprache (Satz aufnehmen, farbige Bewertung, Laute), Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
-  Cache, Offline-Start), Vorstellungsgespräch im Testmodus (Anzeige, zwei Fragen, Bericht, weniger Live-Minuten), Abmelden
+  Cache, Offline-Start), Vorstellungsgespräch im Testmodus (Anzeige, zwei Fragen, Bericht, weniger Live-Minuten; braucht auf einem länger laufenden
+  lokalen Stack mindestens 10 freie Live-Minuten), Abmelden
 
 ## App installieren (PWA)
 

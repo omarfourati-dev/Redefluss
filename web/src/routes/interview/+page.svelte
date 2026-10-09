@@ -70,7 +70,7 @@
     leave();
   });
 
-  /** Tab closed, reload or navigation away mid-call: report (if Omar spoke) or cancel, with keepalive; once only. */
+  /** Tab closed, reload or navigation away mid-call: always report with keepalive (the server settles the seconds); once only. */
   function leave() {
     if (left || phase !== 'live' || !session) return; // while connecting, start() cleans up once connect settles
     left = true;
@@ -82,9 +82,9 @@
     fake = null;
     audioBlocked = false;
     phase = 'done';
-    if (entries.some((e) => e.role === 'omar'))
-      void api('/api/live/report', { method: 'POST', json: { sessionId: s.sessionId, seconds, transcript: entries }, keepalive: true }).catch(() => {});
-    else void cancel(s.sessionId);
+    // Connected (phase live): always report – the server settles the elapsed seconds (also on its 422 without an answer).
+    // A cancel is only for before the connection; a late cancel would not be refunded anyway.
+    void api('/api/live/report', { method: 'POST', json: { sessionId: s.sessionId, seconds, transcript: entries }, keepalive: true }).catch(() => {});
   }
 
   function playAudio() {

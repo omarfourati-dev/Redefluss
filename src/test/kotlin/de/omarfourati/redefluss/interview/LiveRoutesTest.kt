@@ -320,13 +320,73 @@ class LiveRoutesTest {
         assertEquals(45, live())
     }
 
-    @Test fun reportedSecondsAreCappedAtTheReservation() = testApplication {
+    @Test fun reportedSecondsAreCappedAtMaxSeconds() = testApplication {
         val deps = setup()
         application { redefluss(deps) }
         val (c, token) = login()
         val id = c.startId(token)
         assertEquals(HttpStatusCode.OK, c.report(token, id, seconds = 5000).status)
+        assertEquals(720, live())   // (10 + 2) * 60
+    }
+
+    @Test fun overrunWithinMaxSecondsIsCharged() = testApplication {
+        val deps = setup()
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val id = c.startId(token)
+        assertEquals(HttpStatusCode.OK, c.report(token, id, seconds = 650).status)
+        assertEquals(650, live())
+    }
+
+    @Test fun overrunMayPassTheDailyCapByTwoMinutes() = testApplication {
+        val deps = setup()
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val ids = (1..3).map { c.startId(token, minutes = 10) }   // 1800 of 1800 reserved
+        assertEquals(HttpStatusCode.TooManyRequests, c.start(token).status)
+        assertEquals(HttpStatusCode.OK, c.report(token, ids[0], seconds = 720).status)
+        assertEquals(1920, live())   // 120 s over the cap
+    }
+
+    private class MutableClock(var now: java.time.Instant) : java.time.Clock() {
+        override fun getZone() = TEST_CLOCK.zone
+        override fun withZone(zone: java.time.ZoneId?) = this
+        override fun instant() = now
+    }
+
+    @Test fun cancelWithinWindowRefundsLateCancelDoesNot() = testApplication {
+        val clock = MutableClock(TEST_CLOCK.instant())
+        db = TestDb.reset()
+        val deps = testDeps(config = testConfig(), db = db, clock = clock)
+        runBlocking { deps.auth.bootstrapOwner("omar@example.de", pw, reset = false) }
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val early = c.startId(token)
+        val late = c.startId(token)
+        assertEquals(1200, live())
+        clock.now = clock.now.plusSeconds(89)
+        assertEquals(HttpStatusCode.NoContent, c.cancel(token, early).status)
         assertEquals(600, live())
+        clock.now = clock.now.plusSeconds(2)   // 91 s after the start
+        assertEquals(HttpStatusCode.NoContent, c.cancel(token, late).status)
+        assertEquals(600, live())
+        assertEquals("abgebrochen", summaryOf(late))
+        assertEquals(HttpStatusCode.Conflict, c.report(token, late).status)
+    }
+
+    @Test fun jobAdIsDroppedAfterReportAndCancel() = testApplication {
+        val deps = setup()
+        application { redefluss(deps) }
+        val (c, token) = login()
+        val reported = c.startId(token)
+        val cancelled = c.startId(token)
+        val e1 = deps.live.session(UUID.fromString(reported))!!
+        val e2 = deps.live.session(UUID.fromString(cancelled))!!
+        assertTrue(e1.jobAd.isNotEmpty())
+        assertEquals(HttpStatusCode.OK, c.report(token, reported).status)
+        assertEquals("", e1.jobAd)
+        assertEquals(HttpStatusCode.NoContent, c.cancel(token, cancelled).status)
+        assertEquals("", e2.jobAd)
     }
 
     @Test fun emptyOrSilentTranscriptIs422ButSettles() = testApplication {

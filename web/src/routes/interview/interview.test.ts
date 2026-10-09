@@ -294,21 +294,21 @@ describe('Interview', () => {
     expect(body(init).transcript).toHaveLength(3);
   });
 
-  it('leaving mid-call without an answer cancels with keepalive', async () => {
+  it('leaving mid-call without an answer still reports with keepalive (never cancels)', async () => {
     const { pcs, track } = fakeRtc();
     mockApi({
       '/api/overview': () => json(200, overview),
       '/api/live/session': () => json(200, realStart),
-      '/api/live/cancel': () => new Response(null, { status: 204 })
+      '/api/live/report': () => json(422, { type: 'about:blank', title: 'Unprocessable Content', status: 422, detail: 'Im Gespräch war nichts von dir zu hören – deshalb gibt es keinen Bericht.' })
     });
     const { unmount } = render(Page);
     await fillForm();
     await fireEvent.click(screen.getByRole('button', { name: 'Gespräch starten' }));
     await screen.findByRole('log', { name: 'Untertitel' });
     unmount();
-    await vi.waitFor(() => expect(calls('/api/live/cancel')).toHaveLength(1));
-    expect((calls('/api/live/cancel')[0][1] as RequestInit).keepalive).toBe(true);
-    expect(calls('/api/live/report')).toHaveLength(0);
+    await vi.waitFor(() => expect(calls('/api/live/report')).toHaveLength(1));
+    expect((calls('/api/live/report')[0][1] as RequestInit).keepalive).toBe(true);
+    expect(calls('/api/live/cancel')).toHaveLength(0);
     expect(track.stop).toHaveBeenCalled();
     expect(pcs[0].close).toHaveBeenCalled();
   });
@@ -334,12 +334,12 @@ describe('Interview', () => {
     expect(calls('/api/live/cancel')).toHaveLength(0);
   });
 
-  it('closing the tab (pagehide) without an answer cancels once with keepalive', async () => {
+  it('closing the tab (pagehide) without an answer reports once with keepalive (never cancels)', async () => {
     const { pcs, track } = fakeRtc();
     mockApi({
       '/api/overview': () => json(200, overview),
       '/api/live/session': () => json(200, realStart),
-      '/api/live/cancel': () => new Response(null, { status: 204 })
+      '/api/live/report': () => json(422, { type: 'about:blank', title: 'Unprocessable Content', status: 422, detail: 'Im Gespräch war nichts von dir zu hören – deshalb gibt es keinen Bericht.' })
     });
     const { unmount } = render(Page);
     await fillForm();
@@ -347,9 +347,9 @@ describe('Interview', () => {
     await screen.findByRole('log', { name: 'Untertitel' });
     window.dispatchEvent(new Event('pagehide'));
     unmount();
-    await vi.waitFor(() => expect(calls('/api/live/cancel')).toHaveLength(1));
-    expect((calls('/api/live/cancel')[0][1] as RequestInit).keepalive).toBe(true);
-    expect(calls('/api/live/report')).toHaveLength(0);
+    await vi.waitFor(() => expect(calls('/api/live/report')).toHaveLength(1));
+    expect((calls('/api/live/report')[0][1] as RequestInit).keepalive).toBe(true);
+    expect(calls('/api/live/cancel')).toHaveLength(0);
     expect(track.stop).toHaveBeenCalled();
     expect(pcs[0].close).toHaveBeenCalled();
   });

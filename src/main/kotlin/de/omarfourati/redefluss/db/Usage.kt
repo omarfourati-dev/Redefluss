@@ -99,6 +99,15 @@ class UsageRepo(private val db: Db) {
         db.tx { update("UPDATE usage_day SET live_seconds = GREATEST(0, live_seconds - ?) WHERE day = ?", refundSeconds, day) }
     }
 
+    /** Adds [seconds] used beyond the reservation (may pass the daily cap by at most the 2 minutes of grace). */
+    suspend fun chargeLive(day: LocalDate, seconds: Int) {
+        if (seconds <= 0) return
+        db.tx {
+            update("INSERT INTO usage_day (day, live_seconds) VALUES (?, ?) ON CONFLICT (day) DO UPDATE SET live_seconds = usage_day.live_seconds + EXCLUDED.live_seconds",
+                day, seconds)
+        }
+    }
+
     suspend fun liveSecondsOn(day: LocalDate): Int =
         db.tx { sql("SELECT live_seconds FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
 
