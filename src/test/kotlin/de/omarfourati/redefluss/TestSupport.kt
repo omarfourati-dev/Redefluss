@@ -6,6 +6,7 @@ import de.omarfourati.redefluss.auth.Tokens
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.db.*
+import de.omarfourati.redefluss.overview.OverviewService
 import de.omarfourati.redefluss.speech.*
 import de.omarfourati.redefluss.metrics.Metrics
 import java.time.Clock
@@ -36,5 +37,6 @@ fun testDeps(
     val users = UserRepo(database)
     val auth = AuthService(users, Tokens(config.jwtSecret, clock), LoginThrottle(clock), metrics, clock)
     return Deps(config = config, ping = ping, metrics = metrics, log = log, clock = clock, users = users, auth = auth,
-        conversation = ConversationService(SessionRepo(database), MistakeRepo(database), UsageRepo(database), speech, metrics, config, clock))
+        conversation = ConversationService(SessionRepo(database), MistakeRepo(database), UsageRepo(database), speech, metrics, config, clock),
+        overview = OverviewService(UsageRepo(database), SessionRepo(database), MistakeRepo(database), config, clock))
 }

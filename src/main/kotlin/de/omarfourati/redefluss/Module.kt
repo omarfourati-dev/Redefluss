@@ -10,6 +10,8 @@ import de.omarfourati.redefluss.db.UserRepo
 import de.omarfourati.redefluss.http.installHttpBasics
 import de.omarfourati.redefluss.http.respondProblem
 import de.omarfourati.redefluss.metrics.Metrics
+import de.omarfourati.redefluss.overview.OverviewService
+import de.omarfourati.redefluss.overview.overviewRoutes
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.metrics.micrometer.*
@@ -28,6 +30,7 @@ class Deps(
     val users: UserRepo,
     val auth: AuthService,
     val conversation: ConversationService,
+    val overview: OverviewService,
 )
 
 fun Application.redefluss(deps: Deps) {
@@ -50,6 +53,7 @@ fun Application.redefluss(deps: Deps) {
         get("/metrics") { call.respondText(deps.metrics.scrape(), ContentType.parse("text/plain; version=0.0.4")) }
         authRoutes(deps.auth)
         conversationRoutes(deps.conversation)
+        overviewRoutes(deps.overview)
         route("/api") {
             handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
             route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }
