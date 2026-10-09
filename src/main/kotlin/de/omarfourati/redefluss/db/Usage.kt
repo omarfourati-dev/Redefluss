@@ -2,6 +2,8 @@ package de.omarfourati.redefluss.db
 
 import java.time.LocalDate
 
+enum class AzureCount { OK, MONTH, DAY }
+
 class UsageRepo(private val db: Db) {
     /** Counts one turn if today's count is below the limit – atomically, so parallel requests cannot overshoot. */
     suspend fun tryCountTurn(day: LocalDate, limit: Int): Boolean {
@@ -51,4 +53,30 @@ class UsageRepo(private val db: Db) {
 
     suspend fun vocabReviewsOn(day: LocalDate): Int =
         db.tx { sql("SELECT vocab_reviews FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
+
+    /**
+     * One transaction under an advisory lock, so parallel clips near the cap cannot both pass:
+     * month sum + this clip must stay within the cap, today's count below the limit; then count the seconds and the clip.
+     */
+    suspend fun tryCountAzure(day: LocalDate, monthStart: LocalDate, seconds: Int, monthCap: Int, dayLimit: Int): AzureCount = db.tx {
+        sql("SELECT pg_advisory_xact_lock(4242)") { it.next() }
+        val used = sql("SELECT COALESCE(SUM(azure_seconds), 0) FROM usage_day WHERE day >= ? AND day < ?",
+            monthStart, monthStart.plusMonths(1)) { rs -> rs.next(); rs.getLong(1) }
+        if (used + seconds > monthCap) return@tx AzureCount.MONTH
+        val today = sql("SELECT pronunciations FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 }
+        if (today >= dayLimit) return@tx AzureCount.DAY
+        update("""
+            INSERT INTO usage_day (day, pronunciations, azure_seconds) VALUES (?, 1, ?)
+            ON CONFLICT (day) DO UPDATE SET pronunciations = usage_day.pronunciations + 1,
+              azure_seconds = usage_day.azure_seconds + EXCLUDED.azure_seconds
+        """.trimIndent(), day, seconds)
+        AzureCount.OK
+    }
+
+    suspend fun azureSecondsBetween(from: LocalDate, toExclusive: LocalDate): Int = db.tx {
+        sql("SELECT COALESCE(SUM(azure_seconds), 0) FROM usage_day WHERE day >= ? AND day < ?", from, toExclusive) { rs -> rs.next(); rs.getInt(1) }
+    }
+
+    suspend fun pronunciationsOn(day: LocalDate): Int =
+        db.tx { sql("SELECT pronunciations FROM usage_day WHERE day = ?", day) { if (it.next()) it.getInt(1) else 0 } }
 }

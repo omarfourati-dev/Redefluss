@@ -63,8 +63,8 @@ data class Config(
                 pronunciation = pronunciation,
                 azureKey = opt("AZURE_SPEECH_KEY"),
                 azureRegion = opt("AZURE_SPEECH_REGION") ?: "germanywestcentral",
-                azureSecondsPerMonth = int("AZURE_SECONDS_PER_MONTH", 16200),
-                pronunciationsPerDay = int("PRONUNCIATIONS_PER_DAY", 100),
+                azureSecondsPerMonth = int("AZURE_SECONDS_PER_MONTH", 16200).coerceAtLeast(0),
+                pronunciationsPerDay = int("PRONUNCIATIONS_PER_DAY", 100).coerceAtLeast(0),
             )
         }
     }

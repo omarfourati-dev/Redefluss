@@ -47,6 +47,14 @@ class VocabRepo(private val db: Db) {
     suspend fun due(today: LocalDate, limit: Int = 30): List<Card> =
         db.tx { sql("SELECT $COLS FROM vocab_card WHERE due_on <= ? ORDER BY due_on, id LIMIT ?", today, limit) { it.cards() } }
 
+    /** Cards with an example sentence: due ones first (oldest due first), then the newest. */
+    suspend fun forPronunciation(today: LocalDate, limit: Int): List<Card> = db.tx {
+        sql("""
+            SELECT $COLS FROM vocab_card WHERE btrim(example) <> ''
+            ORDER BY (due_on <= ?) DESC, CASE WHEN due_on <= ? THEN due_on END, id DESC LIMIT ?
+        """.trimIndent(), today, today, limit) { it.cards() }
+    }
+
     suspend fun dueCount(today: LocalDate): Int =
         db.tx { sql("SELECT count(*) FROM vocab_card WHERE due_on <= ?", today) { rs -> rs.next(); rs.getInt(1) } }
 

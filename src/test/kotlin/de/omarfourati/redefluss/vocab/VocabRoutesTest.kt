@@ -48,7 +48,7 @@ class VocabRoutesTest {
 
     private class SpyVoice : Voice {
         val texts = mutableListOf<String>()
-        override suspend fun speak(text: String): Audio { texts += text; return FakeVoice().speak(text) }
+        override suspend fun speak(text: String, slow: Boolean): Audio { texts += text; return FakeVoice().speak(text) }
     }
 
     private fun setup(generator: VocabGenerator = SpyGenerator(), checker: VocabChecker = SpyChecker(), voice: Voice = FakeVoice(),

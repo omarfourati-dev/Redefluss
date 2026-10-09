@@ -31,7 +31,7 @@ class FakeCoach : Coach {
 }
 
 class FakeVoice : Voice {
-    override suspend fun speak(text: String): Audio = Audio(silentWav(), "audio/wav")
+    override suspend fun speak(text: String, slow: Boolean): Audio = Audio(silentWav(), "audio/wav")
 
     /** 0.2 s of 8 kHz mono 16-bit silence. */
     private fun silentWav(): ByteArray {

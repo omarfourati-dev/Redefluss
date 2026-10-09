@@ -35,6 +35,10 @@ class MistakeRepo(private val db: Db) {
         sql("SELECT $COLUMNS FROM mistake WHERE NOT resolved ORDER BY count DESC, last_seen DESC LIMIT ?", limit) { it.all() }
     }
 
+    suspend fun topExcept(category: String, limit: Int): List<Mistake> = db.tx {
+        sql("SELECT $COLUMNS FROM mistake WHERE NOT resolved AND category <> ? ORDER BY count DESC, last_seen DESC LIMIT ?", category, limit) { it.all() }
+    }
+
     suspend fun list(status: MistakeStatus, limit: Int = 200): List<Mistake> = db.tx {
         val where = when (status) { MistakeStatus.OPEN -> "WHERE NOT resolved"; MistakeStatus.RESOLVED -> "WHERE resolved"; MistakeStatus.ALL -> "" }
         sql("SELECT $COLUMNS FROM mistake $where ORDER BY count DESC, last_seen DESC LIMIT ?", limit) { it.all() }

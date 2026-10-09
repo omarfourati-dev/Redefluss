@@ -94,6 +94,15 @@ class AzureScorerTest {
         }
     }
 
+    @Test fun recognitionErrorIsUpstreamNotNothingRecognized() {
+        val e = assertFailsWith<de.omarfourati.redefluss.speech.UpstreamException> { parseAzure("""{"RecognitionStatus":"Error"}""") }
+        assertEquals("azure", e.stage)
+        assertFalse(e.timeout)
+        assertFailsWith<de.omarfourati.redefluss.speech.UpstreamException> {
+            runBlocking { scorer(HttpStatusCode.OK, """{"RecognitionStatus":"Error"}""").assess(wav, "x") }
+        }
+    }
+
     @Test fun nothingRecognizedIsNotSwallowedByUpstreamWrapper() {
         assertFailsWith<NothingRecognizedException> { runBlocking { scorer(HttpStatusCode.OK, """{"RecognitionStatus":"NoMatch"}""").assess(wav, "x") } }
     }

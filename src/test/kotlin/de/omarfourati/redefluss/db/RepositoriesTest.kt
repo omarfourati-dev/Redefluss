@@ -1,6 +1,10 @@
 package de.omarfourati.redefluss.db
 
 import de.omarfourati.redefluss.TestDb
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -79,5 +83,34 @@ class RepositoriesTest {
         assertFalse(usage.tryCountVocabGeneration(day))
         assertTrue(usage.tryCountVocabReview(day, 2)); assertTrue(usage.tryCountVocabReview(day, 2))
         assertFalse(usage.tryCountVocabReview(day, 2))
+    }
+
+    @Test fun azureMonthQuotaAndDailyCounter() = runBlocking {
+        val usage = UsageRepo(db)
+        val oct = LocalDate.of(2026, 10, 1)
+        val day = LocalDate.of(2026, 10, 9)
+        assertEquals(AzureCount.OK, usage.tryCountAzure(day, oct, 6, monthCap = 10, dayLimit = 5))
+        assertEquals(AzureCount.MONTH, usage.tryCountAzure(day, oct, 6, monthCap = 10, dayLimit = 5))
+        assertEquals(AzureCount.OK, usage.tryCountAzure(day.plusDays(1), oct, 4, monthCap = 10, dayLimit = 5)) // exactly at the cap
+        assertEquals(10, usage.azureSecondsBetween(oct, oct.plusMonths(1)))
+        assertEquals(1, usage.pronunciationsOn(day))
+        // a new month starts fresh
+        val nov = LocalDate.of(2026, 11, 1)
+        assertEquals(AzureCount.OK, usage.tryCountAzure(nov, nov, 6, monthCap = 10, dayLimit = 1))
+        assertEquals(AzureCount.DAY, usage.tryCountAzure(nov, nov, 1, monthCap = 10, dayLimit = 1))
+        assertEquals(6, usage.azureSecondsBetween(nov, nov.plusMonths(1)))
+        assertEquals(10, usage.azureSecondsBetween(oct, oct.plusMonths(1)))
+        // pronunciations make a day active for the streak
+        assertTrue(nov in usage.activeDaysSince(oct))
+    }
+
+    @Test fun azureQuotaIsAtomicUnderParallelCalls() = runBlocking {
+        val usage = UsageRepo(db)
+        val oct = LocalDate.of(2026, 10, 1)
+        val results = coroutineScope {
+            List(8) { async(Dispatchers.IO) { usage.tryCountAzure(oct.plusDays(it % 3L), oct, 6, 20, 100) } }.awaitAll()
+        }
+        assertEquals(3, results.count { it == AzureCount.OK })
+        assertEquals(18, usage.azureSecondsBetween(oct, oct.plusMonths(1)))
     }
 }

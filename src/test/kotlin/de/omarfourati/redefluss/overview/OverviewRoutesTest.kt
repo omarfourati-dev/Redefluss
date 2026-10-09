@@ -26,6 +26,8 @@ class OverviewRoutesTest {
             usage.tryCountTurn(today, 10); usage.tryCountTurn(today, 10)
             usage.tryCountTurn(today.minusDays(1), 10)
             usage.tryCountTurn(today.minusDays(3), 10)
+            usage.tryCountAzure(today, today.withDayOfMonth(1), 200, 16200, 100)
+            usage.tryCountAzure(today.withDayOfMonth(1).minusDays(1), today.withDayOfMonth(1).minusMonths(1), 999, 16200, 100) // last month
             val sessions = SessionRepo(db)
             val s = sessions.create("conversation", "Arbeit", TEST_CLOCK.instant().minusSeconds(600))
             sessions.touch(s, TEST_CLOCK.instant().minusSeconds(60), 1)            // 9 minutes today
@@ -47,6 +49,8 @@ class OverviewRoutesTest {
         assertEquals(2, o["turnsToday"]!!.jsonPrimitive.int)
         assertEquals(8, o["turnsLeft"]!!.jsonPrimitive.int)
         assertEquals(1, o["vocabDue"]!!.jsonPrimitive.int) // the card created tomorrow is not due yet
+        assertEquals(16000, o["azureSecondsLeft"]!!.jsonPrimitive.int)
+        assertTrue(o["pronunciationEnabled"]!!.jsonPrimitive.boolean)
         val top = o["topMistakes"]!!.jsonArray
         assertEquals(listOf(3, 1), top.map { it.jsonObject["count"]!!.jsonPrimitive.int })
 

@@ -99,6 +99,14 @@ class OpenAiTest {
         assertTrue("\"voice\":\"coral\"" in body && "\"response_format\":\"mp3\"" in body && "Hochdeutsch" in body)
     }
 
+    @Test fun slowVoiceAsksForSlowSpeech() = runBlocking {
+        val v = OpenAiVoice(client(HttpStatusCode.OK to "MP3DATA"), "sk", "gpt-4o-mini-tts", "coral")
+        v.speak("Brücke", slow = true)
+        val body = requests.single().second
+        assertTrue("Sprich langsam und deutlich, Wort für Wort, für einen Deutschlerner." in body)
+        assertFalse("normalem Tempo" in body)
+    }
+
     @Test fun cleanReplyNormalizes() {
         val raw = CoachReply(listOf(
             Correction(" den ganzen Zeit ", "die ganze Zeit", "Zeit ist feminin.", "Artikel"),

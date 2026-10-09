@@ -1,5 +1,6 @@
 package de.omarfourati.redefluss.pronunciation
 
+import de.omarfourati.redefluss.speech.UpstreamException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import kotlin.math.floor
@@ -23,10 +24,12 @@ private fun JsonObject.score(name: String): Double? =
 private fun JsonObject.errorType(): String =
     ((this["PronunciationAssessment"] as? JsonObject)?.get("ErrorType") ?: this["ErrorType"])?.jsonPrimitive?.contentOrNull ?: "None"
 
-/** Throws NothingRecognizedException for NoMatch / InitialSilenceTimeout / empty NBest; any other malformed input throws a parsing exception. */
+/** Throws NothingRecognizedException for NoMatch / InitialSilenceTimeout / empty NBest, UpstreamException for "Error"; any other malformed input throws a parsing exception. */
 fun parseAzure(json: String): Assessment {
     val root = Json.parseToJsonElement(json).jsonObject
     val status = root["RecognitionStatus"]?.jsonPrimitive?.contentOrNull
+    // "Error" is a service-side failure, not silence or mumbling.
+    if (status == "Error") throw UpstreamException("azure", timeout = false)
     if (status != null && status != "Success") throw NothingRecognizedException()
     val best = (root["NBest"] as? JsonArray)?.firstOrNull()?.jsonObject ?: throw NothingRecognizedException()
     val recognized = (best["Display"] ?: best["Lexical"])?.jsonPrimitive?.contentOrNull?.trim().orEmpty()

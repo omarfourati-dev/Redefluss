@@ -15,7 +15,8 @@ data class CoachInput(val utterance: String, val topic: String, val history: Lis
 
 interface Transcriber { suspend fun transcribe(audio: Audio): String }
 interface Coach { suspend fun respond(input: CoachInput): CoachReply }
-interface Voice { suspend fun speak(text: String): Audio }
+/** slow = true: slow, clear, word by word – for pronunciation practice. */
+interface Voice { suspend fun speak(text: String, slow: Boolean = false): Audio }
 
 /** The message is deliberately generic: upstream bodies may contain keys or user text. */
 class UpstreamException(val stage: String, val timeout: Boolean) :

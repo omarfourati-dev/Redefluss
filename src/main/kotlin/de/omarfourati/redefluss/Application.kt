@@ -7,6 +7,8 @@ import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.overview.OverviewService
+import de.omarfourati.redefluss.pronunciation.PronunciationService
+import de.omarfourati.redefluss.pronunciation.scorerFor
 import de.omarfourati.redefluss.speech.speechFor
 import de.omarfourati.redefluss.speech.openAiHttpClient
 import de.omarfourati.redefluss.vocab.VocabRepo
@@ -43,8 +45,11 @@ fun main() {
     val speech = speechFor(config, http)
     val vocabRepo = VocabRepo(db)
     val conversation = ConversationService(SessionRepo(db), MistakeRepo(db), UsageRepo(db), vocabRepo, speech, metrics, config, clock)
-    val overview = OverviewService(UsageRepo(db), SessionRepo(db), MistakeRepo(db), vocabRepo, config, clock)
+    val pronunciation = PronunciationService(scorerFor(config, { http }, log::warn), MistakeRepo(db), vocabRepo, UsageRepo(db),
+        speech.voice, metrics, config, clock)
+    runBlocking { pronunciation.refreshGauge() }
+    val overview = OverviewService(UsageRepo(db), SessionRepo(db), MistakeRepo(db), vocabRepo, config, clock, pronunciation.enabled)
     val vocab = VocabService(vocabRepo, MistakeRepo(db), UsageRepo(db), vocabAiFor(config, http), speech, metrics, config, clock)
-    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation, overview, vocab)
+    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation, overview, vocab, pronunciation)
     embeddedServer(Netty, port = config.port) { redefluss(deps) }.start(wait = true)
 }

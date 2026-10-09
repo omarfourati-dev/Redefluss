@@ -28,7 +28,7 @@ class ConversationRoutesTest {
             return inner.respond(input)
         }
     }
-    private class BrokenVoice : Voice { override suspend fun speak(text: String): Audio = throw UpstreamException("voice", false) }
+    private class BrokenVoice : Voice { override suspend fun speak(text: String, slow: Boolean): Audio = throw UpstreamException("voice", false) }
 
     private fun setup(coach: Coach = FakeCoach(), voice: Voice = FakeVoice(), turnsPerDay: String = "300", log: (String) -> Unit = {}): Deps {
         val deps = testDeps(config = testConfig("TURNS_PER_DAY" to turnsPerDay), db = TestDb.reset(),

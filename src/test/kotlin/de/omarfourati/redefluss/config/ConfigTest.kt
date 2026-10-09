@@ -69,6 +69,12 @@ class ConfigTest {
         assertFailsWith<ConfigException> { Config.from(base + ("PRONUNCIATION" to "google")) }
     }
 
+    @Test fun pronunciationLimitsAreClampedToZero() {
+        val c = Config.from(base + mapOf("AZURE_SECONDS_PER_MONTH" to "-5", "PRONUNCIATIONS_PER_DAY" to "-1"))
+        assertEquals(0, c.azureSecondsPerMonth)
+        assertEquals(0, c.pronunciationsPerDay)
+    }
+
     @Test fun vocabPerDayIsClamped() {
         assertEquals(10, Config.from(base + ("VOCAB_PER_DAY" to "20")).vocabPerDay)
         assertEquals(5, Config.from(base + ("VOCAB_PER_DAY" to "2")).vocabPerDay)

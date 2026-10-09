@@ -15,6 +15,8 @@ import de.omarfourati.redefluss.http.spa
 import de.omarfourati.redefluss.metrics.Metrics
 import de.omarfourati.redefluss.overview.OverviewService
 import de.omarfourati.redefluss.overview.overviewRoutes
+import de.omarfourati.redefluss.pronunciation.PronunciationService
+import de.omarfourati.redefluss.pronunciation.pronunciationRoutes
 import de.omarfourati.redefluss.vocab.VocabService
 import de.omarfourati.redefluss.vocab.vocabRoutes
 import io.ktor.http.*
@@ -37,6 +39,7 @@ class Deps(
     val conversation: ConversationService,
     val overview: OverviewService,
     val vocab: VocabService,
+    val pronunciation: PronunciationService,
 )
 
 fun Application.redefluss(deps: Deps) {
@@ -63,6 +66,7 @@ fun Application.redefluss(deps: Deps) {
         conversationRoutes(deps.conversation)
         overviewRoutes(deps.overview)
         vocabRoutes(deps.vocab)
+        pronunciationRoutes(deps.pronunciation)
         route("/api") {
             handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
             route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }

@@ -126,15 +126,20 @@ class OpenAiCoach(private val http: HttpClient, private val key: String, private
 
 class OpenAiVoice(private val http: HttpClient, private val key: String, private val model: String, private val voice: String,
                   private val timeoutMs: Long = 20_000) : Voice {
-    override suspend fun speak(text: String): Audio = upstream("voice", timeoutMs) {
+    override suspend fun speak(text: String, slow: Boolean): Audio = upstream("voice", timeoutMs) {
         val res = http.post("$BASE/audio/speech") {
             bearerAuth(key)
             contentType(ContentType.Application.Json)
             setBody(buildJsonObject {
                 put("model", model); put("voice", voice); put("input", text); put("response_format", "mp3")
-                put("instructions", "Sprich natürliches Hochdeutsch, freundlich, in ruhigem, normalem Tempo.")
+                put("instructions", if (slow) SLOW else NORMAL)
             }.toString())
         }
         Audio(res.okBytes("voice", 5_000_000), "audio/mpeg")
+    }
+
+    private companion object {
+        const val NORMAL = "Sprich natürliches Hochdeutsch, freundlich, in ruhigem, normalem Tempo."
+        const val SLOW = "Sprich langsam und deutlich, Wort für Wort, für einen Deutschlerner."
     }
 }
