@@ -74,10 +74,8 @@ jobs:
             printf 'JWT_SECRET=%s\n' "$JWT_SECRET"
             [ -n "$OWNER_EMAIL" ] && printf 'OWNER_EMAIL=%s\n' "$OWNER_EMAIL"
             [ -n "$OWNER_PASSWORD" ] && printf 'OWNER_PASSWORD=%s\n' "$OWNER_PASSWORD"
-            [ -n "$AZURE_SPEECH_KEY" ] && printf 'AZURE_SPEECH_KEY=%s
-' "$AZURE_SPEECH_KEY"
-            [ -n "$AZURE_SPEECH_REGION" ] && printf 'AZURE_SPEECH_REGION=%s
-' "$AZURE_SPEECH_REGION"
+            [ -n "$AZURE_SPEECH_KEY" ] && printf 'AZURE_SPEECH_KEY=%s\n' "$AZURE_SPEECH_KEY"
+            [ -n "$AZURE_SPEECH_REGION" ] && printf 'AZURE_SPEECH_REGION=%s\n' "$AZURE_SPEECH_REGION"
             true
           } > "$DEPLOY_DIR/.env"
           chmod 600 "$DEPLOY_DIR/.env"
