@@ -3,6 +3,9 @@ export const MAX_MS = 60_000;
 const TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
 
 export class MicDeniedError extends Error {}
+export class MicUnavailableError extends Error {}
+
+const STOP_TIMEOUT_MS = 3000;
 
 export function pickMimeType(isSupported: (t: string) => boolean): string | undefined {
   return TYPES.find((t) => {
@@ -47,21 +50,43 @@ export class Recorder {
     return this.rec !== null;
   }
 
+  private release() {
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+  }
+
   async start(): Promise<void> {
+    let stream: MediaStream;
     try {
-      this.stream = await this.env.getUserMedia({
+      stream = await this.env.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true }
       });
     } catch (e) {
-      throw new MicDeniedError((e as Error).message);
+      const name = (e as Error | undefined)?.name;
+      const message = (e as Error | undefined)?.message ?? '';
+      throw name === 'NotAllowedError' || name === 'SecurityError'
+        ? new MicDeniedError(message)
+        : new MicUnavailableError(message);
     }
-    const mimeType = pickMimeType((t) => this.env.MediaRecorder.isTypeSupported(t));
-    this.chunks = [];
-    this.rec = new this.env.MediaRecorder(this.stream, mimeType ? { mimeType } : {});
-    this.rec.ondataavailable = (e) => {
-      if (e.data.size > 0) this.chunks.push(e.data);
-    };
-    this.rec.start();
+    this.stream = stream;
+    try {
+      const mimeType = pickMimeType((t) => this.env.MediaRecorder.isTypeSupported(t));
+      this.chunks = [];
+      const rec = new this.env.MediaRecorder(stream, mimeType ? { mimeType } : {});
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) this.chunks.push(e.data);
+      };
+      rec.onerror = () => {
+        this.release();
+        this.rec = null;
+      };
+      rec.start();
+      this.rec = rec;
+    } catch (e) {
+      this.release();
+      this.rec = null;
+      throw e;
+    }
     this.startedAt = this.env.now();
     this.timer = this.env.setTimeout(() => {
       void this.stop().then((b) => this.onAutoStop?.(b));
@@ -75,13 +100,31 @@ export class Recorder {
     if (this.timer !== null) this.env.clearTimeout(this.timer);
     const duration = this.env.now() - this.startedAt;
     return new Promise((resolve) => {
-      rec.onstop = () => {
-        this.stream?.getTracks().forEach((t) => t.stop());
-        this.stream = null;
-        const type = rec.mimeType || this.chunks[0]?.type || 'audio/webm';
-        resolve(duration < MIN_MS || this.chunks.length === 0 ? null : new Blob(this.chunks, { type }));
+      let done = false;
+      let safety: ReturnType<typeof setTimeout> | undefined;
+      const finish = (blob: Blob | null) => {
+        if (done) return;
+        done = true;
+        if (safety !== undefined) this.env.clearTimeout(safety);
+        this.release();
+        resolve(blob);
       };
-      rec.stop();
+      rec.onstop = () => {
+        const type = rec.mimeType || this.chunks[0]?.type || 'audio/webm';
+        finish(duration < MIN_MS || this.chunks.length === 0 ? null : new Blob(this.chunks, { type }));
+      };
+      rec.onerror = () => finish(null);
+      safety = this.env.setTimeout(() => finish(null), STOP_TIMEOUT_MS);
+      try {
+        rec.stop();
+      } catch {
+        finish(null);
+      }
     });
   }
 }
+
+/** Swappable in tests. */
+export const recorderFactory = {
+  create: (onAutoStop?: (blob: Blob | null) => void): Recorder => new Recorder(undefined, onAutoStop)
+};
