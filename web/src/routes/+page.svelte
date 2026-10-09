@@ -43,6 +43,10 @@
 		>
 		<span class="text-sm text-brand-700">Aussprache →</span>
 	</a>
+	<a href="/interview" class="card mt-3 flex items-center justify-between hover:border-brand-700">
+		<span class="font-semibold">Live-Minuten heute: {data.liveMinutesLeft}</span>
+		<span class="text-sm text-brand-700">Interview →</span>
+	</a>
 	<section class="mt-8">
 		<h2 class="mb-3 text-lg font-semibold">Deine häufigsten Fehler</h2>
 		{#if data.topMistakes.length === 0}

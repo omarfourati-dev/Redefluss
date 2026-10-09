@@ -33,6 +33,7 @@ export interface Overview {
   vocabDue: number;
   azureSecondsLeft: number;
   pronunciationEnabled: boolean;
+  liveMinutesLeft: number;
 }
 export interface Card {
   id: number;
@@ -107,4 +108,35 @@ export interface AssessResponse {
   assessment: Assessment;
   quota: Quota;
   weakWords: string[];
+}
+export type LiveRole = 'recruiter' | 'teamlead' | 'mix';
+export interface LiveStart {
+  sessionId: string;
+  /** true: no WebRTC, the page runs a scripted conversation (clientSecret/expiresAt are null). */
+  fake: boolean;
+  clientSecret: string | null;
+  expiresAt: number | null;
+  model: string;
+  /** Hard stop: the chosen duration + 2 minutes. */
+  maxSeconds: number;
+  minutes: number;
+}
+export interface TranscriptEntry {
+  role: 'interviewer' | 'omar';
+  text: string;
+}
+export interface AnswerFeedback {
+  question: string;
+  answer: string;
+  feedback: string;
+  better: string;
+}
+export interface InterviewReport {
+  /** One-sentence overall verdict. */
+  overall: string;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  answers: AnswerFeedback[];
+  corrections: Correction[];
 }
