@@ -108,24 +108,32 @@ class OpenAiTest {
         assertEquals("Antwort", c.reply)
     }
 
-    @Test fun callerCancellationIsNotWrapped() = runBlocking {
-        val t = OpenAiTranscriber(client(HttpStatusCode.OK to """{"text":"x"}""", delayMs = 5000), "sk", "m")
-        val job = launch { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
+    private val audio = Audio(byteArrayOf(1), "audio/webm")
+
+    @Test fun outerTimeoutIsNotReportedAsUpstreamTimeout() = runBlocking {
+        val t = OpenAiTranscriber(client(HttpStatusCode.OK to """{"text":"x"}""", delayMs = 5_000), "sk", "m", timeoutMs = 10_000)
+        val e = assertFails { withTimeout(50) { t.transcribe(audio) } }
+        assertTrue(e is TimeoutCancellationException && e !is UpstreamException, e.toString())
+    }
+
+    @Test fun callerCancellationIsRethrownUnwrapped() = runBlocking {
+        val t = OpenAiTranscriber(client(HttpStatusCode.OK to """{"text":"x"}""", delayMs = 5_000), "sk", "m", timeoutMs = 10_000)
+        var seen: Throwable? = null
+        val job = launch { try { t.transcribe(audio) } catch (x: Throwable) { seen = x; throw x } }
         delay(50)
         job.cancel()
         job.join()
-        assertTrue(job.isCancelled)
-        // a cancelled child must not surface as UpstreamException
-        val failing = async { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
-        delay(50)
-        failing.cancel()
-        val e = runCatching { failing.await() }.exceptionOrNull()
-        assertTrue(e is CancellationException && e !is UpstreamException, e.toString())
+        assertTrue(seen is CancellationException && seen !is UpstreamException, seen.toString())
     }
 
-    @Test fun oversizedResponseIsRejected() = runBlocking {
-        val t = OpenAiTranscriber(client(HttpStatusCode.OK to "x".repeat(1_000_001)), "sk", "m")
-        assertFailsWith<UpstreamException> { t.transcribe(Audio(byteArrayOf(1), "audio/webm")) }
+    @Test fun oversizedContentLengthIsRejected() = runBlocking {
+        // tiny real body, but a declared length above the cap: only the Content-Length precheck can reject this
+        val http = HttpClient(MockEngine {
+            respond("""{"text":"x"}""", HttpStatusCode.OK,
+                headersOf(HttpHeaders.ContentType to listOf("application/json"), HttpHeaders.ContentLength to listOf("2000000")))
+        })
+        val t = OpenAiTranscriber(http, "sk", "m")
+        assertFailsWith<UpstreamException> { t.transcribe(audio) }
         Unit
     }
 
