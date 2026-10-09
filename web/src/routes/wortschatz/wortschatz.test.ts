@@ -87,6 +87,17 @@ describe('Wortschatz', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Der Sprachdienst antwortet gerade nicht');
   });
 
+  it('retries the load after a failure', async () => {
+    let calls = 0;
+    mockApi({ '/api/vocab/today': () => (++calls === 1 ? json(502, { status: 502, detail: 'Der Sprachdienst antwortet gerade nicht. Bitte versuch es noch einmal.' }) : json(200, today)) });
+    render(Page);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sprachdienst');
+    await fireEvent.click(screen.getByRole('button', { name: 'Nochmal versuchen' }));
+    expect(await screen.findByText('Termin')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Nochmal versuchen' })).toBeNull();
+  });
+
   it('nothing due: says everything is reviewed', async () => {
     mockApi({ '/api/vocab/today': () => json(200, { ...today, dueCount: 0 }) });
     render(Page);

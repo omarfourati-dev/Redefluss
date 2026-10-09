@@ -21,6 +21,7 @@
   let info = $state('');
   let typing = $state(false);
   let text = $state('');
+  let loadFailed = $state(false);
   let alive = true;
 
   const current = $derived<Card | null>(queue[index] ?? null);
@@ -35,7 +36,8 @@
   });
   const locked = $derived(busy || talk.recording);
 
-  onMount(async () => {
+  async function loadToday() {
+    loading = true; error = '';
     try {
       // the first call of the day generates the words (may take ~10 s)
       const t = await api<Today>('/api/vocab/today');
@@ -43,11 +45,13 @@
       today = t;
       dueCount = t.dueCount;
     } catch (e) {
-      if (alive) error = (e as Error).message;
+      if (alive) { error = (e as Error).message; loadFailed = true; }
     } finally {
-      loading = false;
+      if (alive) loading = false;
     }
-  });
+  }
+
+  onMount(loadToday);
 
   onDestroy(() => {
     alive = false;
@@ -184,5 +188,8 @@
 {/if}
 
 {#if error}<p role="alert" class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">{error}</p>{/if}
+{#if error && loadFailed && !today}
+  <button type="button" class="btn-primary mt-3" disabled={loading} onclick={loadToday}>Nochmal versuchen</button>
+{/if}
 {#if info}<p role="status" class="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-800 dark:bg-slate-800 dark:text-slate-200">{info}</p>{/if}
 {#if busy}<p class="mt-4 text-sm text-slate-500" aria-live="polite">Einen Moment …</p>{/if}

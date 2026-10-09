@@ -36,7 +36,7 @@ test('speaking a sentence gives a correction and fills the overview', async ({ p
 
   await page.getByRole('link', { name: 'Übersicht' }).click();
   await expect(page.locator('li').filter({ hasText: 'den ganzen Zeit' }).first()).toBeVisible();
-  await page.getByRole('link', { name: 'Fehler' }).click();
+  await page.getByRole('link', { name: 'Fehler', exact: true }).click();
   await expect(page.getByText('„Zeit“ ist feminin: die Zeit.').first()).toBeVisible();
 });
 
@@ -50,6 +50,26 @@ test('typing works too, and a quick tap is ignored', async ({ page }) => {
   await page.getByLabel('Dein Satz').fill('Ich glaube, du muss mir helfen.');
   await page.getByRole('button', { name: 'Senden' }).click();
   await expect(page.locator('article').last().locator('strong', { hasText: 'du musst' })).toBeVisible();
+});
+
+test('Wortschatz: words of the day, review by typing a sentence', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Wortschatz', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Wortschatz' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Heute neu' })).toBeVisible({ timeout: 30_000 });
+  expect(await page.locator('article').count()).toBeGreaterThanOrEqual(5);
+
+  const review = page.getByRole('button', { name: /^Wiederholen/ });
+  if (!(await review.isVisible())) return; // rerun on the same day: everything is already reviewed
+  await review.click();
+  await expect(page.getByText('Sprich einen Satz mit diesem Wort.')).toBeVisible();
+  const word = (await page.locator('article p.text-2xl span').last().innerText()).trim();
+  await page.getByRole('button', { name: 'Lieber tippen' }).click();
+  await page.getByLabel('Dein Satz').fill(`Ich benutze heute das Wort ${word} in einem Satz.`);
+  await page.getByRole('button', { name: 'Senden' }).click();
+  await expect(page.getByLabel('Ergebnis')).toBeVisible();
+  await expect(page.getByText(/Nächste Wiederholung/)).toBeVisible();
+  await page.getByRole('button', { name: 'Weiter' }).click();
 });
 
 test('installable app: manifest, service worker, no API responses in the cache, offline start', async ({ page, context, request }) => {

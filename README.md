@@ -8,7 +8,7 @@ ein Tageszähler.**
 **Live:** https://redefluss.omarfourati.de · ein einziges Konto (der Besitzer) · installierbar als PWA.
 
 Ein Portfolio-Projekt von [Omar Fourati](https://omarfourati.de), gebaut mit **Kotlin/Ktor** und **Svelte 5**.
-Gebaut ist bisher Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht); die weiteren Etappen stehen unter „Ausblick“.
+Gebaut sind bisher Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht) und Etappe 2 (Wortschatz); die weiteren Etappen stehen unter „Ausblick“.
 
 ## Datenschutz-Ablauf: eine Runde
 
@@ -33,6 +33,18 @@ begrenzt – ein System-Prompt vom Client wird nie übernommen.
 
 **Limits:** 300 Runden pro Tag (`TURNS_PER_DAY`, Standard 300), danach HTTP 429. Mit `SPEECH=fake` laufen Transkription,
 Coach und Sprachausgabe ohne Schlüssel und ohne Kosten (lokal und in der CI); im Betrieb gilt `SPEECH=openai`.
+
+## Wortschatz
+
+Unter „Wortschatz“ erzeugt die KI einmal pro Tag neue Wörter (Artikel, Plural, Bedeutung, Beispielsatz) zu den Themen
+IT und Bewerbung, Alltag und Redewendungen; jedes Wort kommt nur einmal vor. Die Karten lassen sich anhören.
+
+- **Wiederholen nach SM-2:** Zu einer fälligen Karte sprichst (oder tippst) du einen Satz mit dem Wort; die KI bewertet
+  ihn mit 0–5 Sternen, daraus berechnet SM-2 das nächste Fälligkeitsdatum („Weiß ich nicht“ zählt als schwache Wertung).
+- **Fehler werden zu Karten:** Korrekturen aus Gesprächen und Wiederholungen können als Karte (Quelle `mistake`)
+  wiederkommen, bis sie sitzen.
+- **Limits:** `VOCAB_PER_DAY` (Standard 7, erlaubt 5–10) neue Wörter pro Tag, `VOCAB_REVIEWS_PER_DAY` (Standard 60)
+  KI-geprüfte Wiederholungen pro Tag; danach HTTP 429.
 
 ## Kotlin-/Ktor-Konzepte im Projekt
 
@@ -107,7 +119,7 @@ cd web && E2E_BASE_URL=http://localhost:8080 npx playwright test   # E2E gegen d
   Header, Log), statische Dateien
 - Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto, Login, PWA, Service-Worker-Stempel
 - Playwright (`web/e2e/redefluss.spec.ts`): Grundlagen (`robots.txt`, `/healthz`, API nur mit Login), Satz sprechen mit
-  Korrektur und Übersicht, Tippen und ignoriertes Kurz-Tippen, PWA (Manifest, Service Worker, keine API-Antworten im
+  Korrektur und Übersicht, Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
   Cache, Offline-Start), Abmelden
 
 ## App installieren (PWA)
@@ -135,7 +147,7 @@ Variable danach wieder entfernen – nur für Notfälle.
 
 Aus dem Entwurf `docs/superpowers/specs/2026-10-08-redefluss-design.md`; jede Etappe ist einzeln lauffähig:
 
-- **Etappe 2 – Wortschatz:** Wörter des Tages, Wiederholung nach SM-2, Karten-Ablauf, vollständige Übersicht
+- **Etappe 2 – Wortschatz (erledigt):** Wörter des Tages, Wiederholung nach SM-2, Karten-Ablauf, vollständige Übersicht
 - **Etappe 3 – Aussprache:** Bewertung über Azure, ausschließlich im kostenlosen F0-Kontingent (höchstens 4,5 Stunden
   pro Monat), Laute-Anzeige, Aussprache in der Wortschatz-Wiederholung
 - **Etappe 4 – Vorstellungsgespräch live:** Echtzeit-Gespräch (Realtime/WebRTC) mit Bericht und Kostenbremse
