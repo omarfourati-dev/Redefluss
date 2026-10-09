@@ -12,10 +12,12 @@ data class Problem(val type: String = "about:blank", val title: String, val stat
 /** Thrown anywhere in a handler; StatusPages turns it into a Problem response. */
 class ApiException(val status: HttpStatusCode, val title: String, val detail: String) : RuntimeException(detail)
 
+private val problemEncoder = Json { encodeDefaults = true; explicitNulls = true }
+
 val ProblemJson = ContentType.parse("application/problem+json")
 
 suspend fun ApplicationCall.respondProblem(status: HttpStatusCode, title: String, detail: String? = null) {
-    respondText(Json.encodeToString(Problem(title = title, status = status.value, detail = detail)), ProblemJson, status)
+    respondText(problemEncoder.encodeToString(Problem(title = title, status = status.value, detail = detail)), ProblemJson, status)
 }
 
 fun badRequest(detail: String) = ApiException(HttpStatusCode.BadRequest, "Bad Request", detail)

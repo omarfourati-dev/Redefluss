@@ -6,6 +6,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.server.testing.*
+import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class ServerTest {
@@ -29,6 +30,11 @@ class ServerTest {
             val res = client.get(path)
             assertEquals(HttpStatusCode.NotFound, res.status, path)
             assertEquals("application/problem+json", res.contentType()?.withoutParameters()?.toString(), path)
+            val body = kotlinx.serialization.json.Json.parseToJsonElement(res.bodyAsText()).jsonObject
+            assertEquals(setOf("type", "title", "status", "detail"), body.keys, path)
+            assertEquals("about:blank", body["type"]!!.jsonPrimitive.content, path)
+            assertEquals("Not Found", body["title"]!!.jsonPrimitive.content, path)
+            assertEquals(404, body["status"]!!.jsonPrimitive.int, path)
         }
     }
 
