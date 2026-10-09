@@ -24,7 +24,7 @@ class StaticFiles(private val root: String = "static", private val loader: Class
     val index: StaticFile? get() = resolve("/index.html")
 
     /** Traversal attempts get a hard 404, never the SPA fallback. */
-    fun isUnsafe(path: String): Boolean = ".." in path || '\\' in path || path.removePrefix("/").startsWith("/")
+    fun isUnsafe(path: String): Boolean = ".." in path || '\\' in path || path.removePrefix("/").startsWith("/") || path.any { it.code < 0x20 }
 
     /** Bytes of a regular file; null for directories (plain dirs and jar directory entries). */
     private fun readFile(url: java.net.URL): ByteArray? {
@@ -35,8 +35,14 @@ class StaticFiles(private val root: String = "static", private val loader: Class
         val conn = url.openConnection()
         conn.useCaches = false
         if (conn is java.net.JarURLConnection) {
-            val entry = conn.jarEntry
-            if (entry == null || entry.isDirectory) return null
+            val jarFile = conn.jarFile
+            try {
+                val entry = conn.jarEntry
+                if (entry == null || entry.isDirectory) return null
+                return jarFile.getInputStream(entry).use { it.readBytes() }
+            } finally {
+                jarFile.close()
+            }
         }
         return conn.getInputStream().use { it.readBytes() }
     }
@@ -58,9 +64,14 @@ class StaticFiles(private val root: String = "static", private val loader: Class
     }
 }
 
+/** Decodes the request path once; null for malformed escapes. */
+fun decodePath(raw: String): String? =
+    try { java.net.URLDecoder.decode(raw.replace("+", "%2B"), Charsets.UTF_8) } catch (e: IllegalArgumentException) { null }
+
 fun Route.spa(files: StaticFiles) {
     get("{...}") {
-        val path = java.net.URLDecoder.decode(call.request.path().replace("+", "%2B"), Charsets.UTF_8)
+        val path = decodePath(call.request.path())
+            ?: return@get call.respondProblem(HttpStatusCode.NotFound, "Not Found")
         if (path == "/api" || path.startsWith("/api/")) return@get call.respondProblem(HttpStatusCode.NotFound, "Not Found")
         if (files.isUnsafe(path)) return@get call.respondProblem(HttpStatusCode.NotFound, "Not Found")
         val file = files.resolve(path)

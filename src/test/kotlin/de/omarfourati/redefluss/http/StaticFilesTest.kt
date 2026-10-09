@@ -38,6 +38,7 @@ class StaticFilesTest {
         check("/api/unknown", HttpStatusCode.NotFound, type = "application/problem+json")
         check("/..%2f..%2fetc/passwd", HttpStatusCode.NotFound)
         check("/%2e%2e%2fetc/passwd", HttpStatusCode.NotFound)
+        check("/%00x", HttpStatusCode.NotFound)
         check("/api%2Ffoo", HttpStatusCode.NotFound, type = "application/problem+json")
     }
 
@@ -45,6 +46,13 @@ class StaticFilesTest {
         application { redefluss(testDeps()) }
         val hash = CspHashes.inlineScripts(javaClass.getResource("/static/index.html")!!.readText()).single()
         assertTrue("'sha256-$hash'" in client.get("/").headers["Content-Security-Policy"]!!)
+    }
+
+    @Test fun malformedEscapesAreRejected() {
+        // The test client re-encodes a bare '%', so the decoder is checked directly.
+        assertNull(decodePath("/%zz")); assertNull(decodePath("/%")); assertNull(decodePath("/%2"))
+        assertEquals("/a b+c", decodePath("/a%20b+c"))
+        assertTrue(StaticFiles().isUnsafe(decodePath("/%00x")!!))
     }
 
     @Test fun directoriesInsideAJarAreMisses() {
