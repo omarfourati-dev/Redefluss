@@ -38,7 +38,7 @@ class Deps(
 
 fun Application.redefluss(deps: Deps) {
     val files = StaticFiles()
-    val hashes = files.index?.let { CspHashes.inlineScripts(String(it.bytes)) } ?: emptyList()
+    val hashes = files.index?.let { CspHashes.inlineScripts(String(it.bytes, Charsets.UTF_8)) } ?: emptyList()
     installHttpBasics(deps.log, hashes)
     installAuth(deps.auth)
     install(MicrometerMetrics) {

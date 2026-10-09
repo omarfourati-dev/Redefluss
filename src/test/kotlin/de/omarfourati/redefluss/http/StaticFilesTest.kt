@@ -37,11 +37,31 @@ class StaticFilesTest {
         check("/missing.js", HttpStatusCode.NotFound)
         check("/api/unknown", HttpStatusCode.NotFound, type = "application/problem+json")
         check("/..%2f..%2fetc/passwd", HttpStatusCode.NotFound)
+        check("/%2e%2e%2fetc/passwd", HttpStatusCode.NotFound)
+        check("/api%2Ffoo", HttpStatusCode.NotFound, type = "application/problem+json")
     }
 
     @Test fun cspContainsTheBootScriptHash() = testApplication {
         application { redefluss(testDeps()) }
         val hash = CspHashes.inlineScripts(javaClass.getResource("/static/index.html")!!.readText()).single()
         assertTrue("'sha256-$hash'" in client.get("/").headers["Content-Security-Policy"]!!)
+    }
+
+    @Test fun directoriesInsideAJarAreMisses() {
+        val jar = java.io.File.createTempFile("static", ".jar").also { it.deleteOnExit() }
+        java.util.jar.JarOutputStream(jar.outputStream()).use { out ->
+            fun entry(name: String, body: String? = null) {
+                out.putNextEntry(java.util.jar.JarEntry(name)); body?.let { out.write(it.toByteArray()) }; out.closeEntry()
+            }
+            entry("static/index.html", "<p>hi</p>")
+            entry("static/_app/immutable/")
+            entry("static/_app/immutable/x.js", "console.log(2)")
+        }
+        val files = StaticFiles("static", java.net.URLClassLoader(arrayOf(jar.toURI().toURL()), null))
+        assertNotNull(files.resolve("/_app/immutable/x.js")).also { assertEquals("console.log(2)", String(it.bytes)) }
+        assertNull(files.resolve("/_app/immutable/"))
+        assertNull(files.resolve("/_app"))
+        assertNull(files.resolve("/_app/immutable"))
+        assertNotNull(files.resolve("/index.html"))
     }
 }

@@ -26,12 +26,27 @@ class StaticFiles(private val root: String = "static", private val loader: Class
     /** Traversal attempts get a hard 404, never the SPA fallback. */
     fun isUnsafe(path: String): Boolean = ".." in path || '\\' in path || path.removePrefix("/").startsWith("/")
 
+    /** Bytes of a regular file; null for directories (plain dirs and jar directory entries). */
+    private fun readFile(url: java.net.URL): ByteArray? {
+        if (url.protocol == "file") {
+            val f = java.io.File(url.toURI())
+            return if (f.isFile) f.readBytes() else null
+        }
+        val conn = url.openConnection()
+        conn.useCaches = false
+        if (conn is java.net.JarURLConnection) {
+            val entry = conn.jarEntry
+            if (entry == null || entry.isDirectory) return null
+        }
+        return conn.getInputStream().use { it.readBytes() }
+    }
+
     fun resolve(path: String): StaticFile? {
         val rel = path.removePrefix("/").ifEmpty { "index.html" }
         if (isUnsafe(rel)) return null
         cache[rel]?.let { return it }
-        val bytes = loader.getResource("$root/$rel")?.takeIf { it.protocol != "file" || !java.io.File(it.toURI()).isDirectory }
-            ?.readBytes() ?: return null
+        if (rel.endsWith("/")) return null
+        val bytes = loader.getResource("$root/$rel")?.let { readFile(it) } ?: return null
         val type = if (rel.endsWith(".webmanifest")) ContentType.parse("application/manifest+json")
                    else ContentType.defaultForFilePath(rel)
         val control = when {
@@ -45,7 +60,7 @@ class StaticFiles(private val root: String = "static", private val loader: Class
 
 fun Route.spa(files: StaticFiles) {
     get("{...}") {
-        val path = call.request.path()
+        val path = java.net.URLDecoder.decode(call.request.path().replace("+", "%2B"), Charsets.UTF_8)
         if (path == "/api" || path.startsWith("/api/")) return@get call.respondProblem(HttpStatusCode.NotFound, "Not Found")
         if (files.isUnsafe(path)) return@get call.respondProblem(HttpStatusCode.NotFound, "Not Found")
         val file = files.resolve(path)
