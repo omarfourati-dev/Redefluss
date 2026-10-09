@@ -7,8 +7,11 @@ import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.conversation.conversationRoutes
 import de.omarfourati.redefluss.db.UserRepo
+import de.omarfourati.redefluss.http.CspHashes
+import de.omarfourati.redefluss.http.StaticFiles
 import de.omarfourati.redefluss.http.installHttpBasics
 import de.omarfourati.redefluss.http.respondProblem
+import de.omarfourati.redefluss.http.spa
 import de.omarfourati.redefluss.metrics.Metrics
 import de.omarfourati.redefluss.overview.OverviewService
 import de.omarfourati.redefluss.overview.overviewRoutes
@@ -34,7 +37,9 @@ class Deps(
 )
 
 fun Application.redefluss(deps: Deps) {
-    installHttpBasics(deps.log)
+    val files = StaticFiles()
+    val hashes = files.index?.let { CspHashes.inlineScripts(String(it.bytes)) } ?: emptyList()
+    installHttpBasics(deps.log, hashes)
     installAuth(deps.auth)
     install(MicrometerMetrics) {
         registry = deps.metrics.registry
@@ -58,5 +63,6 @@ fun Application.redefluss(deps: Deps) {
             handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
             route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }
         }
+        spa(files)
     }
 }
