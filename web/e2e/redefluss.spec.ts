@@ -40,6 +40,33 @@ test('speaking a sentence gives a correction and fills the overview', async ({ p
   await expect(page.getByText('„Zeit“ ist feminin: die Zeit.').first()).toBeVisible();
 });
 
+test('Aussprache: record a sentence, see the coloured score, open the sounds of a weak word', async ({ page }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Aussprache', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Aussprache', level: 1 })).toBeVisible();
+  await expect(page.getByText(/Aussprache-Kontingent/)).toBeVisible();
+  // Earlier runs may have added mistakes/vocab sentences; the fixed sound sentence is always there.
+  await page.getByRole('heading', { name: 'Schwierige Laute' }).waitFor();
+  await page.getByRole('button', { name: 'Über die Brücke fahren fünf grüne Busse.', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Dein Satz' })).toContainText('Über die Brücke fahren fünf grüne Busse.');
+
+  const talk = page.getByRole('button', { name: /Halten und sprechen/ });
+  await talk.scrollIntoViewIfNeeded(); // the sentence list was scrolled to click a sound sentence
+  const box = (await talk.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(page.getByText(/Ich höre zu/)).toBeVisible();
+  await page.waitForTimeout(1500);
+  await page.mouse.up();
+
+  const score = page.getByRole('region', { name: 'Bewertung' });
+  await expect(score).toBeVisible(); // the browser converted the fake-mic recording to WAV and the fake scorer answered
+  const red = score.locator('button span.text-red-700').first(); // FakeScorer: words with ü are weak
+  await expect(red).toBeVisible();
+  await red.click();
+  await expect(page.getByRole('region', { name: /^Laute in/ })).toBeVisible();
+});
+
 test('typing works too, and a quick tap is ignored', async ({ page }) => {
   await login(page);
   await page.goto('/gespraech');

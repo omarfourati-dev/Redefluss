@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
 
 fun Route.pronunciationRoutes(service: PronunciationService) {
     authenticate("auth") {
-        get("/api/pronunciation/exercises") { call.respond(service.exercises()) }
+        get("/api/pronunciation/exercises") { call.respond(service.exercises(call.request.queryParameters["card"]?.toLongOrNull())) }
         get("/api/pronunciation/quota") { call.respond(service.quota()) }
         post("/api/pronunciation/speak") {
             service.requireEnabled()

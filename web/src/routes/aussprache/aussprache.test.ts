@@ -36,7 +36,7 @@ const DISABLED = 'Aussprache ist noch nicht eingerichtet.';
 type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 function mockApi(handlers: Record<string, Handler>) {
   deps.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const h = handlers[url];
+    const h = handlers[url] ?? handlers[url.split('?')[0]];
     if (!h) throw new Error(`unexpected ${url}`);
     return h(url, init);
   }) as any;
@@ -108,6 +108,30 @@ describe('Aussprache', () => {
     render(Page);
     expect(await screen.findByRole('button', { name: 'Die Besprechung beginnt um neun.' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(screen.getByRole('region', { name: 'Dein Satz' })).getByText('die Besprechung')).toBeInTheDocument();
+  });
+
+  it('?card= is passed to the exercises request so the API can add that card', async () => {
+    pageState.url = new URL('http://localhost/aussprache?card=7');
+    mockApi({ '/api/pronunciation/exercises': () => json(200, exercises) });
+    render(Page);
+    await screen.findByRole('button', { name: 'Die Besprechung beginnt um neun.' });
+    expect(calls('/api/pronunciation/exercises?card=7')).toHaveLength(1);
+  });
+
+  it('the talk button is disabled while a sentence is being played', async () => {
+    const created: HTMLAudioElement[] = [];
+    const Native = globalThis.Audio;
+    globalThis.Audio = function () { const a = new Native(); created.push(a); return a; } as unknown as typeof Audio;
+    mockApi({ '/api/pronunciation/exercises': () => json(200, exercises),
+      '/api/pronunciation/speak': () => new Response(new Blob(['mp3'], { type: 'audio/mpeg' }), { status: 200 }) });
+    render(Page);
+    expect(await screen.findByRole('button', { name: /Halten und sprechen/ })).not.toBeDisabled();
+    await fireEvent.click(screen.getByRole('button', { name: '▶ Vorsprechen' }));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: /Halten und sprechen/ })).toBeDisabled()); // playing until "ended"
+    await vi.waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2)); // unlock + the real play
+    created[0].onended?.(new Event('ended'));
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: /Halten und sprechen/ })).not.toBeDisabled());
+    globalThis.Audio = Native;
   });
 
   it('?ex= preselects any exercise', async () => {

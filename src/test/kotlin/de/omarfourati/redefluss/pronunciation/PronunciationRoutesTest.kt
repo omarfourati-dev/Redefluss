@@ -124,6 +124,30 @@ class PronunciationRoutesTest {
         assertTrue(sounds.all { it["source"]!!.jsonPrimitive.content == "sound" })
     }
 
+    @Test fun cardParameterAddsThatCardFirstWithoutDuplicates() = testApplication {
+        val deps = setup()
+        val db = TestDb.db
+        val ids = runBlocking {
+            val v = VocabRepo(db)
+            val today = LocalDate.now(TEST_CLOCK)
+            val a = v.insertIfNew(NewCard("Termin", "der", "die Termine", "m", "Ich habe morgen einen Termin.", "alltag", "daily"), today.minusDays(2))!!
+            val b = v.insertIfNew(NewCard("Frist", "die", "die Fristen", "m", "Die Frist endet bald.", "it", "daily"), today.plusDays(3))!!
+            val long = v.insertIfNew(NewCard("Langes", "das", "-", "m", "x".repeat(301), "it", "daily"), today.plusDays(9))!!
+            Triple(a.id, b.id, long.id)
+        }
+        application { redefluss(deps) }
+        val (c, token) = login()
+        suspend fun vocab(query: String) = c.get("/api/pronunciation/exercises$query") { bearerAuth(token) }.body<JsonObject>()["groups"]!!
+            .jsonObject["vocab"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+
+        assertEquals(listOf("card-${ids.first}", "card-${ids.second}"), vocab(""))
+        assertEquals(listOf("card-${ids.second}", "card-${ids.first}"), vocab("?card=${ids.second}")) // wanted card first, no duplicate
+        assertEquals(listOf("card-${ids.first}", "card-${ids.second}"), vocab("?card=${ids.first}"))
+        assertEquals(listOf("card-${ids.first}", "card-${ids.second}"), vocab("?card=${ids.third}")) // too long: not offered
+        assertEquals(listOf("card-${ids.first}", "card-${ids.second}"), vocab("?card=99999")) // unknown
+        assertEquals(listOf("card-${ids.first}", "card-${ids.second}"), vocab("?card=abc")) // not a number
+    }
+
     @Test fun speakReturnsAudioAndCountsATurn() = testApplication {
         val voice = SpyVoice()
         val deps = setup(voice = voice, env = mapOf("TURNS_PER_DAY" to "2"))

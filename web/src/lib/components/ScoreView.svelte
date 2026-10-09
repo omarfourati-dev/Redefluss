@@ -40,7 +40,8 @@
   const round = (n: number) => Math.round(Math.max(0, Math.min(100, n)));
 
   /** Full class names so Tailwind finds them: ≥ 80 green, 60–79 amber, < 60 red. */
-  function scoreClass(score: number): string {
+  function scoreClass(raw: number): string {
+    const score = round(raw); // the colour follows the number that is shown (79.6 → 80 → green)
     if (score >= 80) return 'text-green-700 dark:text-green-400';
     if (score >= 60) return 'text-amber-600 dark:text-amber-400';
     return 'text-red-700 dark:text-red-400';
@@ -71,7 +72,7 @@
       {#if selected.phonemes.length > 0}
         <ul class="flex flex-wrap gap-3">
           {#each selected.phonemes as p, j (j)}
-            <li class={p.score < 60 ? 'font-semibold text-red-700 dark:text-red-400' : ''}><span>{p.phoneme}</span> <span>{round(p.score)}</span></li>
+            <li class={round(p.score) < 60 ? 'font-semibold text-red-700 dark:text-red-400' : ''}><span>{p.phoneme}</span> <span>{round(p.score)}</span></li>
           {/each}
         </ul>
       {/if}

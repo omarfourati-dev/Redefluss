@@ -63,6 +63,8 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           OWNER_PASSWORD: ${{ secrets.OWNER_PASSWORD }}
           OWNER_EMAIL: ${{ vars.OWNER_EMAIL }}
+          AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
+          AZURE_SPEECH_REGION: ${{ vars.AZURE_SPEECH_REGION }}
         run: |
           if [ ${#JWT_SECRET} -lt 32 ]; then echo "::error::Secret JWT_SECRET is missing or too short"; exit 1; fi
           {

@@ -52,7 +52,8 @@
   async function load() {
     loading = true; error = ''; loadFailed = false;
     try {
-      const d = await api<Exercises>('/api/pronunciation/exercises');
+      const card = page.url.searchParams.get('card');
+      const d = await api<Exercises>(card ? `/api/pronunciation/exercises?card=${encodeURIComponent(card)}` : '/api/pronunciation/exercises');
       if (!alive) return;
       if (!d.enabled) { disabled = true; return; }
       data = d;
@@ -153,7 +154,7 @@
       </div>
     {:else}
       <div class="mt-4 flex justify-center">
-        <TalkButton disabled={busy} recording={talk.recording} seconds={talk.seconds} onPress={press} onRelease={talk.release} />
+        <TalkButton disabled={busy || speaking || player.playing} recording={talk.recording} seconds={talk.seconds} onPress={press} onRelease={talk.release} />
       </div>
     {/if}
   {/if}

@@ -77,14 +77,16 @@ class PronunciationService(
             (config.pronunciationsPerDay - usage.pronunciationsOn(today())).coerceAtLeast(0))
     }
 
-    suspend fun exercises(): ExercisesDto {
+    /** With [cardId] that card's example sentence is always the first vocab exercise (when it exists and fits), without duplicates. */
+    suspend fun exercises(cardId: Long? = null): ExercisesDto {
         requireEnabled()
         val fromMistakes = mistakes.topExcept("aussprache", 20).mapNotNull { m ->
             val text = Exercises.corrected(m.example, m.wrong, m.right)?.takeIf { it.isNotBlank() && it.length <= MAX_REFERENCE }
                 ?: m.right.takeIf { it.isNotBlank() && it.length <= MAX_REFERENCE }
             text?.let { Exercise("mistake-${m.id}", "mistake", it.trim(), m.rule) }
         }.take(5)
-        val fromVocab = vocab.forPronunciation(today(), 5)
+        val wanted = cardId?.let { vocab.find(it) }
+        val fromVocab = (listOfNotNull(wanted) + vocab.forPronunciation(today(), 5).filter { it.id != wanted?.id })
             .filter { it.example.trim().length <= MAX_REFERENCE }
             .map { Exercise("card-${it.id}", "vocab", it.example.trim(), "${it.article} ${it.word}".trim()) }
         return ExercisesDto(true, quota(), ExerciseGroups(fromMistakes, fromVocab, Exercises.SOUNDS))

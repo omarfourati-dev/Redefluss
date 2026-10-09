@@ -123,6 +123,8 @@ export interface Player {
   unlock(): void;
   /** Play the blob on the shared element; its object URL is revoked after playback. No-op after destroy(). */
   play(blob: Blob): void;
+  /** Audio is currently playing (from `play()` until it ends, fails or is destroyed). */
+  readonly playing: boolean;
   destroy(): void;
 }
 
@@ -131,16 +133,22 @@ export function createPlayer(): Player {
   let el: HTMLAudioElement | null = null;
   let url: string | null = null;
   let destroyed = false;
+  let playing = $state(false);
 
   function revoke() {
     if (url) { URL.revokeObjectURL(url); url = null; }
   }
 
+  function done() {
+    playing = false;
+    revoke();
+  }
+
   function audio(): HTMLAudioElement {
     if (!el) {
       el = new Audio();
-      el.onended = revoke;
-      el.onerror = revoke;
+      el.onended = done;
+      el.onerror = done;
     }
     return el;
   }
@@ -163,12 +171,15 @@ export function createPlayer(): Player {
         revoke();
         url = URL.createObjectURL(blob);
         a.src = url;
+        playing = true;
         const p = a.play() as Promise<void> | undefined;
-        p?.catch(() => revoke());
-      } catch { revoke(); }
+        p?.catch(done);
+      } catch { done(); }
     },
+    get playing() { return playing; },
     destroy() {
       destroyed = true;
+      playing = false;
       if (el) { el.pause(); el.onended = null; el.onerror = null; }
       revoke();
     }

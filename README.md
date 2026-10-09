@@ -8,7 +8,7 @@ ein Tageszähler.**
 **Live:** https://redefluss.omarfourati.de · ein einziges Konto (der Besitzer) · installierbar als PWA.
 
 Ein Portfolio-Projekt von [Omar Fourati](https://omarfourati.de), gebaut mit **Kotlin/Ktor** und **Svelte 5**.
-Gebaut sind bisher Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht) und Etappe 2 (Wortschatz); die weiteren Etappen stehen unter „Ausblick“.
+Gebaut sind bisher Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht), Etappe 2 (Wortschatz) und Etappe 3 (Aussprache); die weiteren Etappen stehen unter „Ausblick“.
 
 ## Datenschutz-Ablauf: eine Runde
 
@@ -45,6 +45,29 @@ IT und Bewerbung, Alltag und Redewendungen; jedes Wort kommt nur einmal vor. Die
   wiederkommen, bis sie sitzen.
 - **Limits:** `VOCAB_PER_DAY` (Standard 7, erlaubt 5–10) neue Wörter pro Tag, `VOCAB_REVIEWS_PER_DAY` (Standard 60)
   KI-geprüfte Wiederholungen pro Tag; danach HTTP 429.
+
+## Aussprache
+
+Unter „Aussprache“ wählst du einen Satz – aus deinen Fehlern, aus dem Wortschatz (von einer Karte aus über `?card=`) oder
+aus zwölf festen Sätzen zu „Schwierigen Lauten“ – und hörst ihn dir vor (normal oder langsam). Dann hältst du die
+Sprechtaste und sprichst ihn nach; der Browser wandelt die Aufnahme in WAV (16 kHz, mono, 16 Bit) um, Azure Speech
+bewertet sie gegen den Satz. Die Anzeige zeigt vier Werte (Gesamt, Genauigkeit, Flüssigkeit, Vollständigkeit) und färbt
+jedes Wort (ab 80 grün, 60–79 gelb, darunter rot, ausgelassene Wörter grau durchgestrichen); ein Tipp auf ein Wort zeigt
+die einzelnen Laute und spielt es langsam vor. Schwache Wörter landen als Fehler (Kategorie `aussprache`) im
+Fehler-Gedächtnis. Aufnahmen werden nie gespeichert.
+
+- **Nur F0, nie Kosten:** Azure wird ausschließlich im kostenlosen F0-Kontingent genutzt. Die App zählt die echte
+  Dauer jeder Aufnahme (aufgerundet auf ganze Sekunden) *vor* dem Azure-Aufruf gegen `AZURE_SECONDS_PER_MONTH`
+  (Standard 16 200 = 4,5 Stunden pro Kalendermonat, Europe/Berlin); auch eine Azure-Antwort „Kontingent“ (429/403) wird
+  nicht wiederholt. Ist es aufgebraucht, antwortet die API mit HTTP 429, alles andere läuft weiter.
+  `PRONUNCIATIONS_PER_DAY` (Standard 100) begrenzt zusätzlich pro Tag.
+- **Verbleibendes Kontingent:** steht oben auf der Aussprache-Seite („noch … diesen Monat · heute noch … Versuche“),
+  per API unter `GET /api/pronunciation/quota` und als Kennzahl `redefluss_azure_seconds_month` (Grafana-Panel
+  „Azure-Kontingent (Monat)“, Alarm bei 80 %).
+- **Lokal ohne Azure:** `PRONUNCIATION=fake` (Standard in `docker-compose.yml` und in der CI) nutzt einen
+  deterministischen Fake-Bewerter: Wörter mit ü, ö oder ch gelten als schwach. Im Betrieb gilt `PRONUNCIATION=azure` mit
+  `AZURE_SPEECH_KEY` und `AZURE_SPEECH_REGION` (Standard `germanywestcentral`); fehlt der Schlüssel, startet die App
+  trotzdem und die Seite zeigt „Aussprache ist noch nicht eingerichtet.“
 
 ## Kotlin-/Ktor-Konzepte im Projekt
 
@@ -119,7 +142,7 @@ cd web && E2E_BASE_URL=http://localhost:8080 npx playwright test   # E2E gegen d
   Header, Log), statische Dateien
 - Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto, Login, PWA, Service-Worker-Stempel
 - Playwright (`web/e2e/redefluss.spec.ts`): Grundlagen (`robots.txt`, `/healthz`, API nur mit Login), Satz sprechen mit
-  Korrektur und Übersicht, Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
+  Korrektur und Übersicht, Aussprache (Satz aufnehmen, farbige Bewertung, Laute), Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
   Cache, Offline-Start), Abmelden
 
 ## App installieren (PWA)
@@ -134,7 +157,7 @@ GitHub Actions (`.github/workflows/`): `ci.yml` läuft auf GitHub-Runnern (Kotli
 Playwright gegen den Fake-Stack). `deploy.yml` startet bei Push auf `main` zuerst die CI und deployt danach auf dem
 Self-hosted-Runner – ohne Pull-Request-Trigger, damit fremder Code dort nie läuft.
 
-Docker Compose (`docker-compose.prod.yml`): ein Container `redefluss` mit `SPEECH=openai`, geteilte PostgreSQL-Instanz
+Docker Compose (`docker-compose.prod.yml`): ein Container `redefluss` mit `SPEECH=openai` und `PRONUNCIATION=azure`, geteilte PostgreSQL-Instanz
 des Servers, Netzwerk `web`; Geheimnisse kommen aus GitHub-Secrets in eine `.env` mit Rechten 600. Caddy terminiert
 HTTPS. Kennzahlen unter `/metrics` sind nur im Docker-Netz erreichbar (öffentlich antwortet Caddy mit 404).
 Prometheus/Grafana (Repo `server-monitoring`) haben Erreichbarkeit, Dashboard und Alarme für gehäuft fehlgeschlagene
@@ -148,6 +171,6 @@ Variable danach wieder entfernen – nur für Notfälle.
 Aus dem Entwurf `docs/superpowers/specs/2026-10-08-redefluss-design.md`; jede Etappe ist einzeln lauffähig:
 
 - **Etappe 2 – Wortschatz (erledigt):** Wörter des Tages, Wiederholung nach SM-2, Karten-Ablauf, vollständige Übersicht
-- **Etappe 3 – Aussprache:** Bewertung über Azure, ausschließlich im kostenlosen F0-Kontingent (höchstens 4,5 Stunden
+- **Etappe 3 – Aussprache (erledigt):** Bewertung über Azure, ausschließlich im kostenlosen F0-Kontingent (höchstens 4,5 Stunden
   pro Monat), Laute-Anzeige, Aussprache in der Wortschatz-Wiederholung
 - **Etappe 4 – Vorstellungsgespräch live:** Echtzeit-Gespräch (Realtime/WebRTC) mit Bericht und Kostenbremse

@@ -20,5 +20,6 @@ services:
       OWNER_EMAIL: ${OWNER_EMAIL:-owner@redefluss.test}
       OWNER_PASSWORD: ${OWNER_PASSWORD:-local-owner-password-123}
       SPEECH: ${SPEECH:-fake}
+      PRONUNCIATION: ${PRONUNCIATION:-fake}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-not-configured}
       TURNS_PER_DAY: ${TURNS_PER_DAY:-300}
