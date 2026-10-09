@@ -13,6 +13,7 @@ describe('Übersicht', () => {
 						minutesToday: 12,
 						turnsToday: 20,
 						turnsLeft: 280,
+						vocabDue: 5,
 						topMistakes: [
 							{
 								id: 1,
@@ -40,6 +41,10 @@ describe('Übersicht', () => {
 			'href',
 			'/gespraech'
 		);
+		expect(screen.getByRole('link', { name: /Fällige Karten: 5/ })).toHaveAttribute(
+			'href',
+			'/wortschatz'
+		);
 	});
 
 	it('first day: no streak, no mistakes yet', async () => {
@@ -51,6 +56,7 @@ describe('Übersicht', () => {
 						minutesToday: 0,
 						turnsToday: 0,
 						turnsLeft: 300,
+						vocabDue: 0,
 						topMistakes: []
 					}),
 					{ status: 200, headers: { 'Content-Type': 'application/json' } }

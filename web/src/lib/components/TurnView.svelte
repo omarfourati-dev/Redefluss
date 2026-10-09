@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { TurnResponse } from '#lib/types';
   import { segments } from '#lib/highlight';
-  import { CATEGORY_LABEL } from '#lib/categories';
+  import Corrections from './Corrections.svelte';
 
   let { turn, onReplay }: { turn: TurnResponse; onReplay?: () => void } = $props();
   const parts = $derived(segments(turn.transcript, turn.corrections.map((c) => c.wrong)));
@@ -16,15 +16,7 @@
     {#if turn.corrections.length === 0}
       <p class="mt-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">✅ Fehlerfrei – stark!</p>
     {:else}
-      <ul class="mt-3 flex flex-col gap-2 text-sm">
-        {#each turn.corrections as c, i (i)}
-          <li>
-            ✏️ <span class="line-through decoration-red-500">{c.wrong}</span> → <strong>{c.right}</strong>
-            <span class="ml-1 rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">{CATEGORY_LABEL[c.category] ?? c.category}</span>
-            <span class="block text-slate-600 dark:text-slate-400">{c.rule}</span>
-          </li>
-        {/each}
-      </ul>
+      <Corrections corrections={turn.corrections} />
     {/if}
     {#if turn.natural && turn.natural !== turn.transcript}
       <p class="mt-3 text-sm"><span aria-hidden="true">💬</span> So klingt es natürlich: <em>{turn.natural}</em></p>

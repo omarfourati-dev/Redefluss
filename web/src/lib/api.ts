@@ -20,20 +20,41 @@ export async function api<T>(
 	path: string,
 	init: RequestInit & { json?: unknown } = {}
 ): Promise<T> {
+	const res = await request(path, init, 'application/json');
+	if (res.status === 204) return undefined as T;
+	try {
+		return (await res.json()) as T;
+	} catch {
+		// e.g. the SPA fallback's index.html answering an unknown /api path with 200
+		throw new ApiError(res.status, 'Unerwartete Antwort vom Server.');
+	}
+}
+
+/** Binary GET (e.g. audio) with the same auth and error handling as {@link api}. */
+export async function apiBlob(path: string): Promise<Blob> {
+	return (await request(path, {}, '*/*')).blob();
+}
+
+async function request(
+	path: string,
+	init: RequestInit & { json?: unknown },
+	accept: string
+): Promise<Response> {
+	const { json, ...rest } = init;
 	const headers: Record<string, string> = {
-		Accept: 'application/json',
-		...(init.headers as Record<string, string>)
+		Accept: accept,
+		...(rest.headers as Record<string, string>)
 	};
 	const sent = auth.token;
 	if (sent) headers.Authorization = `Bearer ${sent}`;
-	let body = init.body;
-	if (init.json !== undefined) {
+	let body = rest.body;
+	if (json !== undefined) {
 		headers['Content-Type'] = 'application/json';
-		body = JSON.stringify(init.json);
+		body = JSON.stringify(json);
 	}
 	let res: Response;
 	try {
-		res = await deps.fetch(path, { ...init, headers, body });
+		res = await deps.fetch(path, { ...rest, headers, body });
 	} catch {
 		throw new ApiError(0, 'Keine Verbindung zum Server.');
 	}
@@ -46,13 +67,7 @@ export async function api<T>(
 		}
 	}
 	if (!res.ok) throw new ApiError(res.status, await problemDetail(res));
-	if (res.status === 204) return undefined as T;
-	try {
-		return (await res.json()) as T;
-	} catch {
-		// e.g. the SPA fallback's index.html answering an unknown /api path with 200
-		throw new ApiError(res.status, 'Unerwartete Antwort vom Server.');
-	}
+	return res;
 }
 
 async function problemDetail(res: Response): Promise<string> {

@@ -2,14 +2,12 @@
   import { onDestroy } from 'svelte';
   import { api } from '#lib/api';
   import type { TurnResponse } from '#lib/types';
-  import { MicDeniedError, MicUnavailableError, recorderFactory, type Recorder } from '#lib/recorder';
+  import { createPlayer, createTalk } from '#lib/talk.svelte';
   import TalkButton from '../../lib/components/TalkButton.svelte';
   import TurnView from '../../lib/components/TurnView.svelte';
 
   const TOPICS = ['Arbeit', 'Alltag', 'Smalltalk', 'Nachrichten', 'Freies Thema'];
-  const PROMPT_MS = 1000;
   const SPEAK_KEY = 'redefluss.speak';
-  const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
 
   let sessionId = $state<string | null>(null);
   let topic = $state('');
@@ -20,78 +18,43 @@
   let info = $state('');
   let typing = $state(false);
   let text = $state('');
-  let recording = $state(false);
-  let seconds = $state(0);
   let turnsLeft = $state<number | null>(null);
   let speak = $state(readSpeak());
-  let ticker: ReturnType<typeof setInterval> | null = null;
-  let recorder: Recorder | null = null;
-  let pressed = false;
   let alive = true;
-  let audioEl: HTMLAudioElement | null = null;
-  let objectUrl: string | null = null;
+  const player = createPlayer();
+  const talk = createTalk({
+    onBlob: (blob) => void send({ audio: blob }),
+    onError: (message, kind) => {
+      error = message;
+      if (kind === 'denied' || kind === 'unavailable') typing = true;
+    },
+    onInfo: (message) => (info = message)
+  });
 
   function readSpeak() { try { return localStorage.getItem(SPEAK_KEY) !== 'false'; } catch { return true; } }
   function setSpeak(v: boolean) { speak = v; try { localStorage.setItem(SPEAK_KEY, String(v)); } catch { /* ignore */ } }
 
-  function revokeUrl() {
-    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
-  }
-
-  /** One shared element: iOS only lets an element play later if it was started inside a user gesture. */
-  function audio(): HTMLAudioElement {
-    if (!audioEl) {
-      audioEl = new Audio();
-      audioEl.onended = revokeUrl;
-      audioEl.onerror = revokeUrl;
-    }
-    return audioEl;
-  }
-
   /** Call synchronously inside the press/submit gesture. */
   function unlockAudio() {
-    if (!speak) return;
-    try {
-      const a = audio();
-      a.src = SILENT;
-      const p = a.play() as Promise<void> | undefined;
-      a.pause();
-      p?.catch(() => {});
-    } catch { /* ignore */ }
+    if (speak) player.unlock();
   }
 
   function play(t: TurnResponse) {
     if (!t.replyAudio || !t.replyAudioType) return;
-    try {
-      const bytes = Uint8Array.from(atob(t.replyAudio), (c) => c.charCodeAt(0));
-      const a = audio();
-      revokeUrl();
-      objectUrl = URL.createObjectURL(new Blob([bytes], { type: t.replyAudioType }));
-      a.src = objectUrl;
-      const p = a.play() as Promise<void> | undefined;
-      p?.catch(() => revokeUrl());
-    } catch { revokeUrl(); }
-  }
-
-  function discardRecording() {
-    pressed = false;
-    recording = false;
-    if (ticker) { clearInterval(ticker); ticker = null; }
-    const r = recorder;
-    recorder = null;
-    if (r) void r.stop();
+    let bytes: Uint8Array<ArrayBuffer>;
+    try { bytes = Uint8Array.from(atob(t.replyAudio), (c) => c.charCodeAt(0)); } catch { return; }
+    player.play(new Blob([bytes], { type: t.replyAudioType }));
   }
 
   function resetSession() {
-    discardRecording();
+    talk.destroy();
     sessionId = null; turns = []; text = ''; error = ''; turnsLeft = null; typing = false;
   }
 
   onDestroy(() => {
     alive = false;
-    discardRecording();
-    if (audioEl) { audioEl.pause(); audioEl.onended = null; audioEl.onerror = null; }
-    revokeUrl();
+    talk.destroy();
+    player.destroy();
   });
 
   async function start(t: string) {
@@ -127,54 +90,11 @@
     } catch (e) { if (alive && sessionId === sid) error = (e as Error).message; } finally { busy = false; }
   }
 
-  async function press() {
-    if (busy || recorder || pressed) return;
-    pressed = true;
+  function press() {
+    if (busy || talk.active) return;
     error = ''; info = '';
     unlockAudio();
-    const r = recorderFactory.create((blob) => { if (recorder === r) finish(blob); });
-    recorder = r;
-    const t0 = performance.now();
-    try {
-      await r.start();
-    } catch (e) {
-      if (recorder === r) recorder = null;
-      pressed = false;
-      if (e instanceof MicDeniedError) { error = 'Ich darf das Mikrofon nicht benutzen. Erlaube es in den Browser-Einstellungen – oder tippe deinen Satz.'; typing = true; }
-      else if (e instanceof MicUnavailableError) { error = 'Kein Mikrofon gefunden – du kannst deinen Satz auch tippen.'; typing = true; }
-      else error = 'Aufnahme nicht möglich.';
-      return;
-    }
-    if (recorder !== r) { void r.stop(); return; }
-    if (!pressed) {
-      // released before the permission prompt resolved: discard
-      recorder = null;
-      void r.stop();
-      // a long wait means the user was answering the microphone prompt, not tapping too briefly
-      if (performance.now() - t0 > PROMPT_MS) info = 'Mikrofon ist freigegeben – halte die Taste jetzt gedrückt und sprich.';
-      else error = 'Zu kurz – halte die Taste gedrückt, während du sprichst.';
-      return;
-    }
-    recording = true; seconds = 0;
-    ticker = setInterval(() => (seconds += 1), 1000);
-  }
-
-  async function release() {
-    pressed = false;
-    const r = recorder;
-    if (!r || !recording) return;
-    const blob = await r.stop();
-    if (recorder !== r) return;
-    finish(blob);
-  }
-
-  function finish(blob: Blob | null) {
-    recording = false;
-    pressed = false;
-    if (ticker) { clearInterval(ticker); ticker = null; }
-    recorder = null;
-    if (blob) void send({ audio: blob });
-    else error = 'Zu kurz – halte die Taste gedrückt, während du sprichst.';
+    void talk.press();
   }
 
   function submitText(e: SubmitEvent) {
@@ -203,7 +123,7 @@
 {:else}
   <p class="mb-4 text-sm text-slate-500">Thema: <strong>{topic}</strong>
     {#if turnsLeft !== null} · <span>Noch {turnsLeft} Runden heute</span>{/if}
-    · <button type="button" class="underline disabled:opacity-50" disabled={busy || recording} onclick={resetSession}>Thema wechseln</button></p>
+    · <button type="button" class="underline disabled:opacity-50" disabled={busy || talk.recording} onclick={resetSession}>Thema wechseln</button></p>
 
   <div class="flex flex-col gap-6">
     {#each turns as t, i (i)}<TurnView turn={t} onReplay={() => play(t)} />{/each}
@@ -215,7 +135,7 @@
   {#if busy}<p class="mt-4 text-sm text-slate-500" aria-live="polite">Einen Moment …</p>{/if}
 
   <div class="sticky bottom-0 mt-6 flex flex-col items-center gap-3 bg-slate-50/90 py-4 backdrop-blur dark:bg-slate-950/90">
-    <TalkButton disabled={busy} {recording} {seconds} onPress={press} onRelease={release} />
+    <TalkButton disabled={busy} recording={talk.recording} seconds={talk.seconds} onPress={press} onRelease={talk.release} />
     <div class="flex gap-4 text-sm">
       <button type="button" class="underline" onclick={() => (typing = !typing)}>Lieber tippen</button>
       <label class="flex items-center gap-1"><input type="checkbox" checked={speak} onchange={(e) => setSpeak((e.currentTarget as HTMLInputElement).checked)} /> Antwort vorlesen</label>

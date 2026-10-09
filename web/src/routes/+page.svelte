@@ -30,6 +30,10 @@
 		</div>
 	</div>
 	<a href="/gespraech" class="btn-primary mt-6 w-full py-3 text-lg">Jetzt sprechen</a>
+	<a href="/wortschatz" class="card mt-3 flex items-center justify-between hover:border-brand-700">
+		<span class="font-semibold">Fällige Karten: {data.vocabDue}</span>
+		<span class="text-sm text-brand-700">Wortschatz →</span>
+	</a>
 	<section class="mt-8">
 		<h2 class="mb-3 text-lg font-semibold">Deine häufigsten Fehler</h2>
 		{#if data.topMistakes.length === 0}

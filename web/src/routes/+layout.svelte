@@ -24,6 +24,7 @@
 	const nav = [
 		{ href: '/', label: 'Übersicht' },
 		{ href: '/gespraech', label: 'Gespräch' },
+		{ href: '/wortschatz', label: 'Wortschatz' },
 		{ href: '/fehler', label: 'Fehler' },
 		{ href: '/konto', label: 'Konto' }
 	];
