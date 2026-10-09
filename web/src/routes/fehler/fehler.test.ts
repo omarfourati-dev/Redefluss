@@ -43,4 +43,44 @@ describe('Fehler', () => {
 			expect((deps.fetch as any).mock.calls.at(-1)[0]).toBe('/api/mistakes?status=resolved')
 		);
 	});
+	it('ignores an older response that arrives after a newer filter was chosen', async () => {
+		const pending: Record<string, (r: Response) => void> = {};
+		deps.fetch = vi.fn(
+			(url: string) => new Promise<Response>((resolve) => (pending[url] = resolve))
+		) as any;
+		render(Page);
+		await fireEvent.click(screen.getByRole('button', { name: 'Gelernt' }));
+		await vi.waitFor(() => expect(pending['/api/mistakes?status=resolved']).toBeDefined());
+		const json = (body: unknown) =>
+			new Response(JSON.stringify(body), {
+				status: 200,
+				headers: { 'Content-Type': 'application/json' }
+			});
+		pending['/api/mistakes?status=resolved'](json([{ ...m, id: 8, right: 'gelernt-eintrag', resolved: true }]));
+		expect(await screen.findByText('gelernt-eintrag')).toBeInTheDocument();
+		pending['/api/mistakes?status=open'](json([m]));
+		await new Promise((r) => setTimeout(r, 20));
+		expect(screen.queryByText('du musst')).not.toBeInTheDocument();
+		expect(screen.getByText('gelernt-eintrag')).toBeInTheDocument();
+	});
+
+	it('clears the error after a successful refetch and hides the empty text while failed', async () => {
+		let first = true;
+		deps.fetch = vi.fn(async () => {
+			if (first) {
+				first = false;
+				return new Response(JSON.stringify({ detail: 'Kaputt.' }), {
+					status: 500,
+					headers: { 'Content-Type': 'application/problem+json' }
+				});
+			}
+			return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+		}) as any;
+		render(Page);
+		expect(await screen.findByRole('alert')).toBeInTheDocument();
+		expect(screen.queryByText(/Keine offenen Fehler/)).not.toBeInTheDocument();
+		await fireEvent.click(screen.getByRole('button', { name: 'Gelernt' }));
+		await vi.waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+		expect(screen.getByText('Noch nichts als gelernt markiert.')).toBeInTheDocument();
+	});
 });

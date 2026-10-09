@@ -14,20 +14,32 @@
 
 	$effect(() => {
 		const s = status;
+		let stale = false;
+		error = '';
 		api<Mistake[]>(`/api/mistakes?status=${s}`)
-			.then((r) => (items = r))
-			.catch((e) => (error = e.message));
+			.then((r) => {
+				if (!stale) items = r;
+			})
+			.catch((e) => {
+				if (!stale) error = e.message;
+			});
+		return () => {
+			stale = true;
+		};
 	});
 
 	async function toggle(m: Mistake) {
+		const at = status;
+		error = '';
 		try {
 			await api(`/api/mistakes/${m.id}`, { method: 'PATCH', json: { resolved: !m.resolved } });
+			if (status !== at) return;
 			items =
-				status === 'all'
+				at === 'all'
 					? items.map((x) => (x.id === m.id ? { ...x, resolved: !x.resolved } : x))
 					: items.filter((x) => x.id !== m.id);
 		} catch (e) {
-			error = (e as Error).message;
+			if (status === at) error = (e as Error).message;
 		}
 	}
 </script>
@@ -44,7 +56,7 @@
 	{/each}
 </div>
 {#if error}<p role="alert" class="text-red-700">{error}</p>{/if}
-{#if items.length === 0}
+{#if items.length === 0 && !error}
 	<p class="text-slate-500">
 		{status === 'resolved' ? 'Noch nichts als gelernt markiert.' : 'Keine offenen Fehler – weiter so!'}
 	</p>
