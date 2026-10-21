@@ -42,11 +42,11 @@ class ServerTest {
         application { redefluss(testDeps()) }
         val h = client.get("/healthz").headers
         assertEquals("nosniff", h["X-Content-Type-Options"])
-        assertEquals("no-referrer", h["Referrer-Policy"])
+        assertEquals("strict-origin-when-cross-origin", h["Referrer-Policy"])
         assertEquals("microphone=(self), camera=(), geolocation=()", h["Permissions-Policy"])
         val csp = h["Content-Security-Policy"]!!
         for (part in listOf("default-src 'self'", "media-src 'self' blob: data:", "frame-ancestors 'none'", "script-src 'self'",
-            "connect-src 'self' https://api.openai.com;")) {
+            "connect-src 'self' https:;", "frame-src https:;", "img-src 'self' data: blob: https:;")) {
             assertTrue(part in csp, "CSP misses $part: $csp")
         }
     }

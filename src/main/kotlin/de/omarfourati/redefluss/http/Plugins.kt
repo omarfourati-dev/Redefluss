@@ -20,14 +20,17 @@ fun Application.installHttpBasics(log: (String) -> Unit, scriptHashes: List<Stri
     // Behind Caddy: Caddy appends the real client IP as the last X-Forwarded-For entry; earlier entries are client-controlled.
     install(XForwardedHeaders) { useLastProxy() }
 
-    val scriptSrc = (listOf("'self'") + scriptHashes.map { "'sha256-$it'" }).joinToString(" ")
-    val csp = "default-src 'self'; script-src $scriptSrc; img-src 'self' data: blob:; media-src 'self' blob: data:; " +
-        "style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.openai.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    // Google AdSense on the live site (web/src/lib/ads.ts, Omar's decision 2026-10-21): auto ads and Google's consent
+    // message load scripts, frames and pixels from changing Google hosts, so HTTPS sources are allowed; inline scripts
+    // still need their hash. AdSense needs the page origin as referrer to serve ads for this site.
+    val scriptSrc = (listOf("'self'") + scriptHashes.map { "'sha256-$it'" } + "https:").joinToString(" ")
+    val csp = "default-src 'self'; script-src $scriptSrc; img-src 'self' data: blob: https:; media-src 'self' blob: data:; " +
+        "style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-src https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     install(createApplicationPlugin("SecurityHeaders") {
         onCall { call ->
             call.response.headers.append("Content-Security-Policy", csp)
             call.response.headers.append("X-Content-Type-Options", "nosniff")
-            call.response.headers.append("Referrer-Policy", "no-referrer")
+            call.response.headers.append("Referrer-Policy", "strict-origin-when-cross-origin")
             call.response.headers.append("Permissions-Policy", "microphone=(self), camera=(), geolocation=()")
         }
     })

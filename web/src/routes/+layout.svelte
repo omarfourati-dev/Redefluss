@@ -5,6 +5,7 @@
 	import { dev } from '$app/env';
 	import { auth } from '#lib/auth.svelte';
 	import { pwa } from '#lib/pwa.svelte';
+	import { loadAds, PRIVACY_URL, resetAdConsent } from '#lib/ads';
 
 	let pwaStarted = false;
 
@@ -19,6 +20,10 @@
 		if (dev || pwaStarted) return;
 		pwaStarted = true;
 		void pwa.register().catch(() => undefined);
+	});
+
+	$effect(() => {
+		loadAds();
 	});
 
 	const nav = [
@@ -75,3 +80,7 @@
 	</header>
 	<main class="mx-auto max-w-3xl px-4 py-6">{@render children()}</main>
 {/if}
+<footer class="mx-auto flex max-w-3xl justify-center gap-4 px-4 pt-2 pb-8 text-xs text-slate-500">
+	<button type="button" class="hover:text-brand-700" onclick={() => resetAdConsent()}>Datenschutzeinstellungen</button>
+	<a href={PRIVACY_URL} class="hover:text-brand-700" target="_blank" rel="noopener">Datenschutz</a>
+</footer>

@@ -1,2 +1,6 @@
+# Google AdSense must read the pages to serve ads (web/src/lib/ads.ts); everything else stays out.
+User-agent: Mediapartners-Google
+Allow: /
+
 User-agent: *
 Disallow: /
