@@ -25,7 +25,8 @@ fun Application.installHttpBasics(log: (String) -> Unit, scriptHashes: List<Stri
     // still need their hash. AdSense needs the page origin as referrer to serve ads for this site.
     val scriptSrc = (listOf("'self'") + scriptHashes.map { "'sha256-$it'" } + "https:").joinToString(" ")
     val csp = "default-src 'self'; script-src $scriptSrc; img-src 'self' data: blob: https:; media-src 'self' blob: data:; " +
-        "style-src 'self' 'unsafe-inline'; connect-src 'self' https:; frame-src https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; " +
+        "connect-src 'self' https:; frame-src https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     install(createApplicationPlugin("SecurityHeaders") {
         onCall { call ->
             call.response.headers.append("Content-Security-Policy", csp)

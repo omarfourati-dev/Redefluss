@@ -46,7 +46,8 @@ class ServerTest {
         assertEquals("microphone=(self), camera=(), geolocation=()", h["Permissions-Policy"])
         val csp = h["Content-Security-Policy"]!!
         for (part in listOf("default-src 'self'", "media-src 'self' blob: data:", "frame-ancestors 'none'", "script-src 'self'",
-            "connect-src 'self' https:;", "frame-src https:;", "img-src 'self' data: blob: https:;")) {
+            "connect-src 'self' https:;", "frame-src https:;", "img-src 'self' data: blob: https:;",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;", "font-src 'self' https://fonts.gstatic.com;")) {
             assertTrue(part in csp, "CSP misses $part: $csp")
         }
     }
