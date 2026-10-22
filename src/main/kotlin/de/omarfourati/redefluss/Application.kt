@@ -6,6 +6,8 @@ import de.omarfourati.redefluss.auth.Tokens
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.ConversationService
 import de.omarfourati.redefluss.db.*
+import de.omarfourati.redefluss.invite.InvitationRepo
+import de.omarfourati.redefluss.invite.InvitationService
 import de.omarfourati.redefluss.interview.LiveService
 import de.omarfourati.redefluss.interview.reporterFor
 import de.omarfourati.redefluss.interview.realtimeFor
@@ -36,7 +38,9 @@ fun main() {
     val db = Db.connect(config.databaseUrl, config.dbUser, config.dbPassword)
     val metrics = Metrics()
     val users = UserRepo(db)
-    val auth = AuthService(users, Tokens(config.jwtSecret, clock), LoginThrottle(clock), metrics, clock)
+    val tokens = Tokens(config.jwtSecret, clock)
+    val throttle = LoginThrottle(clock)
+    val auth = AuthService(users, tokens, throttle, metrics, clock)
     ownerCheck(runBlocking { users.count() }, config.ownerEmail, config.ownerPassword)?.let {
         log.error(it)
         exitProcess(1)
@@ -54,6 +58,7 @@ fun main() {
     val overview = OverviewService(UsageRepo(db), SessionRepo(db), MistakeRepo(db), vocabRepo, config, clock, pronunciation.enabled)
     val vocab = VocabService(vocabRepo, MistakeRepo(db), UsageRepo(db), vocabAiFor(config, http), speech, metrics, config, clock)
     val live = LiveService(realtimeFor(config, http), reporterFor(config, http), SessionRepo(db), MistakeRepo(db), UsageRepo(db), metrics, config, clock)
-    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation, overview, vocab, pronunciation, live)
+    val invitations = InvitationService(InvitationRepo(db), users, tokens, throttle, clock)
+    val deps = Deps(config, db::ping, metrics, log::info, clock, users, auth, conversation, overview, vocab, pronunciation, live, invitations)
     embeddedServer(Netty, port = config.port) { redefluss(deps) }.start(wait = true)
 }

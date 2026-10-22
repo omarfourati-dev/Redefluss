@@ -161,6 +161,43 @@ test('installable app: manifest, service worker, no API responses in the cache, 
   await context.setOffline(false);
 });
 
+test('Gäste: invite by link, the guest sets a password and only sees her own data', async ({ page, browser }) => {
+  await login(page);
+  await page.getByRole('link', { name: 'Konto' }).click();
+  const guestEmail = `gast-${Date.now()}@redefluss.test`;
+  await page.getByLabel('E-Mail des Gastes').fill(guestEmail);
+  await page.getByRole('button', { name: 'Einladung erstellen' }).click();
+  const link = await page.getByLabel(/Einladungslink/).inputValue();
+  expect(link).toMatch(/\/einladung#[\w-]{40,}$/);
+
+  const guestContext = await browser.newContext();
+  const guest = await guestContext.newPage();
+  await guest.goto(link);
+  await expect(guest.getByLabel('E-Mail')).toHaveValue(guestEmail);
+  await guest.getByLabel('Passwort', { exact: true }).fill('gast-passwort-123');
+  await guest.getByLabel('Passwort wiederholen').fill('gast-passwort-123');
+  await guest.getByRole('button', { name: 'Konto anlegen' }).click();
+  await expect(guest.getByRole('heading', { name: 'Übersicht' })).toBeVisible();
+  // the owner's mistakes from the earlier tests stay hidden
+  await guest.getByRole('link', { name: 'Fehler', exact: true }).click();
+  await expect(guest.getByText('Keine offenen Fehler – weiter so!')).toBeVisible();
+  await guest.getByRole('link', { name: 'Konto' }).click();
+  await expect(guest.getByText(`Angemeldet als ${guestEmail}`)).toBeVisible();
+  await expect(guest.getByRole('heading', { name: 'Gäste einladen' })).toHaveCount(0);
+
+  // the link works only once
+  const again = await guestContext.newPage();
+  await again.goto(link);
+  await expect(again.getByRole('alert')).toContainText('ungültig, abgelaufen oder wurde schon benutzt');
+  await guestContext.close();
+
+  await page.reload();
+  const row = page.getByRole('listitem').filter({ hasText: guestEmail }).filter({ hasText: 'seit' });
+  page.once('dialog', (d) => d.accept());
+  await row.getByRole('button', { name: 'Entfernen' }).click();
+  await expect(row).toHaveCount(0);
+});
+
 test('logout returns to the login page', async ({ page }) => {
   await login(page);
   await page.getByRole('button', { name: 'Abmelden' }).click();

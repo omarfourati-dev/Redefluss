@@ -2,6 +2,9 @@ package de.omarfourati.redefluss.config
 
 class ConfigException(message: String) : RuntimeException(message)
 
+/** Daily limits of one account; the owner gets the classic values, invited guests smaller ones. */
+data class Limits(val turnsPerDay: Int, val liveMinutesPerDay: Int, val pronunciationsPerDay: Int, val vocabReviewsPerDay: Int)
+
 data class Config(
     val port: Int,
     val databaseUrl: String,
@@ -28,7 +31,17 @@ data class Config(
     val liveMinutesPerDay: Int,
     val realtimeModel: String,
     val realtimeVoice: String,
+    val guestTurnsPerDay: Int = 100,
+    val guestLiveMinutesPerDay: Int = 15,
+    val guestPronunciationsPerDay: Int = 30,
+    val guestVocabReviewsPerDay: Int = 30,
+    /** Caps over all accounts together, so a few guests cannot multiply the costs. */
+    val totalTurnsPerDay: Int = 500,
+    val totalLiveMinutesPerDay: Int = 60,
 ) {
+    val ownerLimits: Limits get() = Limits(turnsPerDay, liveMinutesPerDay, pronunciationsPerDay, vocabReviewsPerDay)
+    val guestLimits: Limits get() = Limits(guestTurnsPerDay, guestLiveMinutesPerDay, guestPronunciationsPerDay, guestVocabReviewsPerDay)
+
     /** The generated data-class text would print every secret; mask them. */
     override fun toString(): String = "Config(port=$port, databaseUrl=$databaseUrl, dbUser=$dbUser, dbPassword=***, jwtSecret=***, " +
         "ownerEmail=$ownerEmail, ownerPassword=${ownerPassword?.let { "***" }}, speech=$speech, openAiKey=${openAiKey?.let { "***" }}, " +
@@ -76,6 +89,12 @@ data class Config(
                 liveMinutesPerDay = int("LIVE_MINUTES_PER_DAY", 30).coerceIn(0, 120),
                 realtimeModel = opt("REALTIME_MODEL") ?: "gpt-realtime",
                 realtimeVoice = opt("REALTIME_VOICE") ?: "marin",
+                guestTurnsPerDay = int("GUEST_TURNS_PER_DAY", 100).coerceAtLeast(0),
+                guestLiveMinutesPerDay = int("GUEST_LIVE_MINUTES_PER_DAY", 15).coerceIn(0, 120),
+                guestPronunciationsPerDay = int("GUEST_PRONUNCIATIONS_PER_DAY", 30).coerceAtLeast(0),
+                guestVocabReviewsPerDay = int("GUEST_VOCAB_REVIEWS_PER_DAY", 30).coerceAtLeast(0),
+                totalTurnsPerDay = int("TOTAL_TURNS_PER_DAY", 500).coerceAtLeast(0),
+                totalLiveMinutesPerDay = int("TOTAL_LIVE_MINUTES_PER_DAY", 60).coerceIn(0, 480),
             )
         }
     }

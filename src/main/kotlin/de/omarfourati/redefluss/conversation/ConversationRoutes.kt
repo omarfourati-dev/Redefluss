@@ -1,5 +1,6 @@
 package de.omarfourati.redefluss.conversation
 
+import de.omarfourati.redefluss.auth.UserPrincipal
 import de.omarfourati.redefluss.http.AppJson
 import de.omarfourati.redefluss.http.badRequest
 import de.omarfourati.redefluss.speech.HistoryTurn
@@ -22,7 +23,7 @@ fun Route.conversationRoutes(service: ConversationService) {
     authenticate("auth") {
         post("/api/sessions") {
             val req = runCatching { call.receive<StartRequest>() }.getOrDefault(StartRequest())
-            call.respond(HttpStatusCode.Created, StartResponse(service.startSession(req.topic).toString()))
+            call.respond(HttpStatusCode.Created, StartResponse(service.startSession(call.principal<UserPrincipal>()!!, req.topic).toString()))
         }
         post("/api/turns") {
             val form = readTurnForm(call)
@@ -31,7 +32,7 @@ fun Route.conversationRoutes(service: ConversationService) {
             val history = fields["history"]?.let {
                 runCatching { AppJson.decodeFromString(ListSerializer(HistoryTurn.serializer()), it) }.getOrElse { throw badRequest("history ist kein gültiges JSON.") }
             } ?: emptyList()
-            val response = service.turn(TurnRequest(id, fields["text"], form.audio, history, fields["speak"] != "false"))
+            val response = service.turn(call.principal<UserPrincipal>()!!, TurnRequest(id, fields["text"], form.audio, history, fields["speak"] != "false"))
             // AppJson omits nulls; the client expects replyAudio/replyAudioType to be present (null when voice failed or was off).
             call.respondText(TurnJson.encodeToString(TurnResponse.serializer(), response), ContentType.Application.Json)
         }

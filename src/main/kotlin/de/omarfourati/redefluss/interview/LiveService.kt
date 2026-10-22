@@ -1,7 +1,9 @@
 package de.omarfourati.redefluss.interview
 
+import de.omarfourati.redefluss.auth.UserPrincipal
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.toApiException
+import de.omarfourati.redefluss.db.LimitCount
 import de.omarfourati.redefluss.db.MistakeRepo
 import de.omarfourati.redefluss.db.NewMistake
 import de.omarfourati.redefluss.db.SessionRepo
@@ -45,7 +47,7 @@ val CANCEL_REFUND_WINDOW: Duration = Duration.ofSeconds(90)
  * [claim] hands out the reservation exactly once – to the report (settle) or to a cancel (full refund).
  */
 class LiveSession(val id: UUID, val day: LocalDate, val reservedSeconds: Int, jobAd: String, val role: InterviewRole, val minutes: Int,
-                  val startedAt: Instant) {
+                  val startedAt: Instant, val userId: Long) {
     /** The job ad lives only until the session is final (reported or cancelled); then it is dropped from memory. */
     @Volatile var jobAd: String = jobAd; private set
     fun dropJobAd() { jobAd = "" }
@@ -69,7 +71,7 @@ class LiveSession(val id: UUID, val day: LocalDate, val reservedSeconds: Int, jo
     fun markReported() { reported = true }
     /** Cancelled, or claimed by a report that finished. */
     val isFinal: Boolean get() = reported || (isClaimed && !claimedByReport)
-    override fun toString(): String = "LiveSession(id=$id, day=$day, reservedSeconds=$reservedSeconds, role=$role, minutes=$minutes)"
+    override fun toString(): String = "LiveSession(id=$id, userId=$userId, day=$day, reservedSeconds=$reservedSeconds, role=$role, minutes=$minutes)"
 }
 
 class LiveService(
@@ -83,7 +85,10 @@ class LiveService(
     /** The in-memory session (for the report), or null after a restart or once 20 newer sessions pushed it out. */
     fun session(id: UUID): LiveSession? = synchronized(cache) { cache[id] }
 
-    suspend fun start(req: StartRequest): StartResponse {
+    /** The in-memory session only for the account that started it; for every other account it does not exist. */
+    private fun sessionOf(user: UserPrincipal, id: UUID): LiveSession? = session(id)?.takeIf { it.userId == user.id }
+
+    suspend fun start(user: UserPrincipal, req: StartRequest): StartResponse {
         val jobAd = req.jobAd.trim()
         if (jobAd.isEmpty()) throw badRequest("Bitte füg eine Stellenanzeige ein.")
         if (jobAd.length > MAX_JOB_AD) throw badRequest("Die Stellenanzeige ist zu lang (höchstens $MAX_JOB_AD Zeichen).")
@@ -93,17 +98,20 @@ class LiveService(
 
         val day = LocalDate.now(clock)
         val seconds = req.minutes * 60
-        if (!usage.tryReserveLive(day, seconds, config.liveMinutesPerDay * 60)) {
+        val limit = user.limits(config).liveMinutesPerDay
+        val reserved = usage.tryReserveLive(user.id, day, seconds, limit * 60, config.totalLiveMinutesPerDay * 60)
+        if (reserved != LimitCount.OK) {
             metrics.liveSession("limit")
             throw ApiException(HttpStatusCode.TooManyRequests, "Too Many Requests",
-                "Für heute sind die Live-Minuten aufgebraucht (${config.liveMinutesPerDay} Minuten). Morgen geht's weiter.")
+                if (reserved == LimitCount.TOTAL) "Die Live-Minuten von Redefluss sind für heute aufgebraucht. Morgen geht's weiter."
+                else "Für heute sind die Live-Minuten aufgebraucht ($limit Minuten). Morgen geht's weiter.")
         }
         var id: UUID? = null
         try {
-            id = sessions.create("interview", topic(jobAd), clock.instant())
-            val known = mistakes.topExcept("aussprache", 5).map { KnownMistake(it.wrong, it.right, it.category) }
+            id = sessions.create(user.id, "interview", topic(jobAd), clock.instant())
+            val known = mistakes.topExcept(user.id, "aussprache", 5).map { KnownMistake(it.wrong, it.right, it.category) }
             val secret = metrics.timed("realtime") { realtime.create(LiveSetup(jobAd, role, req.minutes, known)) }
-            synchronized(cache) { cache[id] = LiveSession(id, day, seconds, jobAd, role, req.minutes, clock.instant()) }
+            synchronized(cache) { cache[id] = LiveSession(id, day, seconds, jobAd, role, req.minutes, clock.instant(), user.id) }
             metrics.liveSession("started")
             return StartResponse(id.toString(), secret == null, secret?.value, secret?.expiresAt, config.realtimeModel,
                 (req.minutes + 2) * 60, req.minutes)
@@ -111,8 +119,8 @@ class LiveService(
             // The browser never got a session: give the reservation back (also when the client went away meanwhile).
             withContext(NonCancellable) {
                 // A database error here must not mask the original failure.
-                runCatching { usage.settleLive(day, seconds) }
-                id?.let { runCatching { sessions.markCancelled(it) } }
+                runCatching { usage.settleLive(user.id, day, seconds) }
+                id?.let { runCatching { sessions.markCancelled(user.id, it) } }
             }
             if (e is UpstreamException) {
                 metrics.liveSession("upstream_error")
@@ -126,14 +134,14 @@ class LiveService(
      * Gives the whole reservation back once (mic denied, WebRTC failed, …) – but only within [CANCEL_REFUND_WINDOW] of the start.
      * Repeated or later cancels refund nothing (the call may have been connected; the report settles the real seconds).
      */
-    suspend fun cancel(id: UUID) {
-        val entry = session(id)
-        if (entry == null && sessions.mode(id) != "interview") throw notFound("Dieses Gespräch gibt es nicht mehr.")
+    suspend fun cancel(user: UserPrincipal, id: UUID) {
+        val entry = sessionOf(user, id)
+        if (entry == null && sessions.mode(user.id, id) != "interview") throw notFound("Dieses Gespräch gibt es nicht mehr.")
         if (entry != null && entry.claim()) {
             val refund = Duration.between(entry.startedAt, clock.instant()) <= CANCEL_REFUND_WINDOW
             withContext(NonCancellable) {
-                if (refund) usage.settleLive(entry.day, entry.reservedSeconds)
-                sessions.markCancelled(id)
+                if (refund) usage.settleLive(entry.userId, entry.day, entry.reservedSeconds)
+                sessions.markCancelled(entry.userId, id)
             }
             entry.dropJobAd()
         }
@@ -146,10 +154,10 @@ class LiveService(
      * A failed attempt (upstream, timeout, DB) may be retried: the first attempt's settlement stands, later seconds are ignored.
      * 409 only once reported or cancelled, or while another report call for this session is running.
      */
-    suspend fun report(id: UUID, seconds: Int, transcript: List<TranscriptEntry>): InterviewReport {
-        val entry = session(id)
+    suspend fun report(user: UserPrincipal, id: UUID, seconds: Int, transcript: List<TranscriptEntry>): InterviewReport {
+        val entry = sessionOf(user, id)
         if (entry == null) {
-            val summary = if (sessions.mode(id) == "interview") sessions.summary(id) else null
+            val summary = if (sessions.mode(user.id, id) == "interview") sessions.summary(user.id, id) else null
             if (summary.isNullOrEmpty()) throw notFound("Dieses Gespräch gibt es nicht mehr.")
             throw alreadyReported()
         }
@@ -176,8 +184,8 @@ class LiveService(
             // (which may exceed the daily budget by at most 2 minutes).
             val used = seconds.coerceAtMost((entry.minutes + 2) * 60)
             withContext(NonCancellable) {
-                if (used < entry.reservedSeconds) usage.settleLive(entry.day, entry.reservedSeconds - used)
-                else usage.chargeLive(entry.day, used - entry.reservedSeconds)
+                if (used < entry.reservedSeconds) usage.settleLive(entry.userId, entry.day, entry.reservedSeconds - used)
+                else usage.chargeLive(entry.userId, entry.day, used - entry.reservedSeconds)
             }
             entry.markSettled()
             metrics.liveSeconds(used)
@@ -200,12 +208,12 @@ class LiveService(
         val fallback = answers.joinToString(" ").take(300)
         if (!entry.mistakesRecorded) {
             report.corrections.forEach { c ->
-                mistakes.record(NewMistake(c.category, c.wrong, c.right, c.rule, answers.firstOrNull { c.wrong in it } ?: fallback), now)
+                mistakes.record(entry.userId, NewMistake(c.category, c.wrong, c.right, c.rule, answers.firstOrNull { c.wrong in it } ?: fallback), now)
                 metrics.mistake(c.category)
             }
             entry.markMistakesRecorded()
         }
-        sessions.finishInterview(entry.id, report.overall, answers.size, report.corrections.size, now)
+        sessions.finishInterview(entry.userId, entry.id, report.overall, answers.size, report.corrections.size, now)
         entry.markReported()
         entry.dropJobAd()
         metrics.liveSession("reported")

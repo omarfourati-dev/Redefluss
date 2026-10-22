@@ -1,5 +1,8 @@
 package de.omarfourati.redefluss.pronunciation
 
+import de.omarfourati.redefluss.OWNER
+import de.omarfourati.redefluss.OWNER_PRINCIPAL
+
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.speech.*
@@ -84,12 +87,12 @@ class PronunciationRoutesTest {
         val db = TestDb.db
         runBlocking {
             val m = MistakeRepo(db)
-            repeat(2) { m.record(NewMistake("artikel", "den ganzen Zeit", "die ganze Zeit", "„Zeit“ ist feminin.", "Ich habe Den ganzen Zeit gewartet."), TEST_CLOCK.instant()) }
-            m.record(NewMistake("aussprache", "Brücke", "Brücke", "Aussprache von „Brücke“ üben", sentence), TEST_CLOCK.instant())
+            repeat(2) { m.record(OWNER, NewMistake("artikel", "den ganzen Zeit", "die ganze Zeit", "„Zeit“ ist feminin.", "Ich habe Den ganzen Zeit gewartet."), TEST_CLOCK.instant()) }
+            m.record(OWNER, NewMistake("aussprache", "Brücke", "Brücke", "Aussprache von „Brücke“ üben", sentence), TEST_CLOCK.instant())
             val v = VocabRepo(db)
             val today = LocalDate.now(TEST_CLOCK)
-            v.insertIfNew(NewCard("Termin", "der", "die Termine", "m", "Ich habe morgen einen Termin.", "alltag", "daily"), today.minusDays(2))
-            v.insertIfNew(NewCard("Frist", "die", "die Fristen", "m", "Die Frist endet bald.", "it", "daily"), today.plusDays(3))
+            v.insertIfNew(OWNER, NewCard("Termin", "der", "die Termine", "m", "Ich habe morgen einen Termin.", "alltag", "daily"), today.minusDays(2))
+            v.insertIfNew(OWNER, NewCard("Frist", "die", "die Fristen", "m", "Die Frist endet bald.", "it", "daily"), today.plusDays(3))
         }
         application { redefluss(deps) }
         val (c, token) = login()
@@ -131,9 +134,9 @@ class PronunciationRoutesTest {
         val ids = runBlocking {
             val v = VocabRepo(db)
             val today = LocalDate.now(TEST_CLOCK)
-            val a = v.insertIfNew(NewCard("Termin", "der", "die Termine", "m", "Ich habe morgen einen Termin.", "alltag", "daily"), today.minusDays(2))!!
-            val b = v.insertIfNew(NewCard("Frist", "die", "die Fristen", "m", "Die Frist endet bald.", "it", "daily"), today.plusDays(3))!!
-            val long = v.insertIfNew(NewCard("Langes", "das", "-", "m", "x".repeat(301), "it", "daily"), today.plusDays(9))!!
+            val a = v.insertIfNew(OWNER, NewCard("Termin", "der", "die Termine", "m", "Ich habe morgen einen Termin.", "alltag", "daily"), today.minusDays(2))!!
+            val b = v.insertIfNew(OWNER, NewCard("Frist", "die", "die Fristen", "m", "Die Frist endet bald.", "it", "daily"), today.plusDays(3))!!
+            val long = v.insertIfNew(OWNER, NewCard("Langes", "das", "-", "m", "x".repeat(301), "it", "daily"), today.plusDays(9))!!
             Triple(a.id, b.id, long.id)
         }
         application { redefluss(deps) }
@@ -160,7 +163,7 @@ class PronunciationRoutesTest {
         assertTrue(res.readRawBytes().isNotEmpty())
         assertEquals(HttpStatusCode.OK, c.speak(token, sentence, slow = false).status)
         assertEquals(listOf("Brücke" to true, sentence to false), voice.calls)
-        assertEquals(2, UsageRepo(TestDb.db).turnsOn(LocalDate.now(TEST_CLOCK)))
+        assertEquals(2, UsageRepo(TestDb.db).turnsOn(OWNER, LocalDate.now(TEST_CLOCK)))
         val limited = c.speak(token, "Hallo", slow = false)
         assertEquals(HttpStatusCode.TooManyRequests, limited.status)
         assertTrue("Tageslimit erreicht" in limited.detail())
@@ -183,11 +186,11 @@ class PronunciationRoutesTest {
         assertEquals(16198, quota["secondsLeft"]!!.jsonPrimitive.int)
         assertEquals(99, quota["todayLeft"]!!.jsonPrimitive.int)
 
-        val mistakes = MistakeRepo(TestDb.db).list(MistakeStatus.ALL)
+        val mistakes = MistakeRepo(TestDb.db).list(OWNER, MistakeStatus.ALL)
         assertEquals(setOf("Über", "Brücke", "fünf", "grüne"), mistakes.map { it.wrong }.toSet())
         assertTrue(mistakes.all { it.category == "aussprache" && it.right == it.wrong && it.example == sentence })
         assertEquals("Aussprache von „Brücke“ üben – schwache Laute: ü", mistakes.single { it.wrong == "Brücke" }.rule)
-        assertEquals(0, VocabRepo(TestDb.db).dueCount(LocalDate.now(TEST_CLOCK).plusDays(10))) // never vocab cards
+        assertEquals(0, VocabRepo(TestDb.db).dueCount(OWNER, LocalDate.now(TEST_CLOCK).plusDays(10))) // never vocab cards
 
         val scrape = deps.metrics.scrape()
         assertTrue("redefluss_pronunciations_total{outcome=\"ok\"} 1.0" in scrape)
@@ -210,7 +213,7 @@ class PronunciationRoutesTest {
         val (c, token) = login()
         val body = c.assess(token, text = "Guten Morgen.").body<JsonObject>()
         assertEquals(listOf("morgen"), body["weakWords"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertEquals("Aussprache von „morgen“ üben – das Wort fehlte", MistakeRepo(TestDb.db).top(5).single().rule)
+        assertEquals("Aussprache von „morgen“ üben – das Wort fehlte", MistakeRepo(TestDb.db).top(OWNER, 5).single().rule)
     }
 
     @Test fun badAudioIsRejectedBeforeAnyCount() = testApplication {
@@ -293,7 +296,7 @@ class PronunciationRoutesTest {
         assertEquals(HttpStatusCode.UnprocessableEntity, res.status)
         assertEquals("Ich habe nichts verstanden – bitte noch einmal.", res.detail())
         assertEquals(2, UsageRepo(TestDb.db).azureSecondsBetween(LocalDate.of(2026, 10, 1), LocalDate.of(2026, 11, 1))) // ceil(1.2)
-        assertEquals(1, UsageRepo(TestDb.db).pronunciationsOn(LocalDate.now(TEST_CLOCK)))
+        assertEquals(1, UsageRepo(TestDb.db).pronunciationsOn(OWNER, LocalDate.now(TEST_CLOCK)))
     }
 
     @Test fun nothingRecognizedCountsAsNoSpeechMetric() = testApplication {
@@ -346,7 +349,7 @@ class PronunciationRoutesTest {
             assertEquals(HttpStatusCode.ServiceUnavailable, r.status)
             assertEquals("Aussprache ist noch nicht eingerichtet.", r.detail())
         }
-        assertEquals(0, UsageRepo(TestDb.db).turnsOn(LocalDate.now(TEST_CLOCK)))
+        assertEquals(0, UsageRepo(TestDb.db).turnsOn(OWNER, LocalDate.now(TEST_CLOCK)))
         val overview = c.get("/api/overview") { bearerAuth(token) }.body<JsonObject>()
         assertFalse(overview["pronunciationEnabled"]!!.jsonPrimitive.boolean)
     }
@@ -354,7 +357,7 @@ class PronunciationRoutesTest {
     @Test fun monthBoundaryUsesBerlin() = testApplication {
         val clock = Clock.fixed(Instant.parse("2026-10-31T23:30:00Z"), TEST_ZONE) // 1 November, 00:30 in Berlin
         val deps = setup(clock = clock, env = mapOf("AZURE_SECONDS_PER_MONTH" to "16200"))
-        runBlocking { UsageRepo(TestDb.db).tryCountAzure(LocalDate.of(2026, 10, 31), LocalDate.of(2026, 10, 1), 16000, 16200, 100) }
+        runBlocking { UsageRepo(TestDb.db).tryCountAzure(OWNER, LocalDate.of(2026, 10, 31), LocalDate.of(2026, 10, 1), 16000, 16200, 100) }
         application { redefluss(deps) }
         val (c, token) = login()
         val res = c.assess(token, audio = seconds(6.0))
@@ -367,7 +370,7 @@ class PronunciationRoutesTest {
         val clock = Clock.fixed(Instant.parse("2026-10-31T23:30:00Z"), TEST_ZONE) // 1 November in Berlin
         val deps = setup(clock = clock)
         runBlocking {
-            UsageRepo(TestDb.db).tryCountAzure(LocalDate.of(2026, 10, 31), LocalDate.of(2026, 10, 1), 500, 16200, 100)
+            UsageRepo(TestDb.db).tryCountAzure(OWNER, LocalDate.of(2026, 10, 31), LocalDate.of(2026, 10, 1), 500, 16200, 100)
             deps.metrics.azureSecondsMonth(500) // value left over from October
         }
         application { redefluss(deps) }

@@ -1,5 +1,8 @@
 package de.omarfourati.redefluss.conversation
 
+import de.omarfourati.redefluss.OWNER
+import de.omarfourati.redefluss.OWNER_PRINCIPAL
+
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.MistakeRepo
 import de.omarfourati.redefluss.speech.*
@@ -70,7 +73,7 @@ class ConversationRoutesTest {
         assertTrue(body["replyAudio"]!!.jsonPrimitive.content.isNotEmpty())
         assertEquals(299, body["turnsLeft"]!!.jsonPrimitive.int)
         c.turn(token, id, text = "Wieder den ganzen Zeit.")
-        assertEquals(2, MistakeRepo(TestDb.db).top(5).single().count)
+        assertEquals(2, MistakeRepo(TestDb.db).top(OWNER, 5).single().count)
     }
 
     @Test fun audioTurnFromAnIphone() = testApplication {
@@ -132,8 +135,8 @@ class ConversationRoutesTest {
         application { redefluss(deps) }
         runBlocking {
             val m = de.omarfourati.redefluss.db.MistakeRepo(TestDb.db)
-            repeat(5) { m.record(de.omarfourati.redefluss.db.NewMistake("aussprache", "Brücke", "Brücke", "Aussprache von „Brücke“ üben", "Über die Brücke."), TEST_CLOCK.instant()) }
-            m.record(de.omarfourati.redefluss.db.NewMistake("konjugation", "du muss", "du musst", "du → -st", "Du muss gehen."), TEST_CLOCK.instant())
+            repeat(5) { m.record(OWNER, de.omarfourati.redefluss.db.NewMistake("aussprache", "Brücke", "Brücke", "Aussprache von „Brücke“ üben", "Über die Brücke."), TEST_CLOCK.instant()) }
+            m.record(OWNER, de.omarfourati.redefluss.db.NewMistake("konjugation", "du muss", "du musst", "du → -st", "Du muss gehen."), TEST_CLOCK.instant())
         }
         val (c, token, id) = session()
         c.turn(token, id, text = "Hallo")

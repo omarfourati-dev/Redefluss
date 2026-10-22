@@ -9,7 +9,7 @@ describe('login page', () => {
 		deps.goto = vi.fn();
 		deps.fetch = vi.fn(
 			async () =>
-				new Response(JSON.stringify({ token: 't', email: 'omar@example.de' }), {
+				new Response(JSON.stringify({ token: 't', email: 'omar@example.de', role: 'owner' }), {
 					status: 200,
 					headers: { 'Content-Type': 'application/json' }
 				})
@@ -23,6 +23,7 @@ describe('login page', () => {
 		});
 		await fireEvent.click(screen.getByRole('button', { name: 'Anmelden' }));
 		await vi.waitFor(() => expect(auth.token).toBe('t'));
+		expect(auth.role).toBe('owner');
 		expect(deps.goto).toHaveBeenCalledWith('/');
 	});
 

@@ -1,7 +1,10 @@
 package de.omarfourati.redefluss.pronunciation
 
+import de.omarfourati.redefluss.auth.UserPrincipal
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.conversation.toApiException
+import de.omarfourati.redefluss.conversation.turnLimit
+import de.omarfourati.redefluss.db.LimitCount
 import de.omarfourati.redefluss.db.AzureCount
 import de.omarfourati.redefluss.db.MistakeRepo
 import de.omarfourati.redefluss.db.NewMistake
@@ -68,39 +71,43 @@ class PronunciationService(
     /** Sets the month gauge from the database (at startup and after each counted clip). */
     suspend fun refreshGauge() = metrics.azureSecondsMonth(monthSecondsUsed())
 
-    /** Also refreshes the gauge, so it drops to the new month's sum after the 1st without waiting for a counted clip. */
-    suspend fun quota(): QuotaDto {
+    /**
+     * The month's seconds are shared by all accounts (one free Azure quota), the daily attempts are the account's own.
+     * Also refreshes the gauge, so it drops to the new month's sum after the 1st without waiting for a counted clip.
+     */
+    suspend fun quota(user: UserPrincipal): QuotaDto {
         requireEnabled()
         val used = monthSecondsUsed()
         metrics.azureSecondsMonth(used)
         return QuotaDto(true, (config.azureSecondsPerMonth - used).coerceAtLeast(0), config.azureSecondsPerMonth,
-            (config.pronunciationsPerDay - usage.pronunciationsOn(today())).coerceAtLeast(0))
+            (user.limits(config).pronunciationsPerDay - usage.pronunciationsOn(user.id, today())).coerceAtLeast(0))
     }
 
     /** With [cardId] that card's example sentence is always the first vocab exercise (when it exists and fits), without duplicates. */
-    suspend fun exercises(cardId: Long? = null): ExercisesDto {
+    suspend fun exercises(user: UserPrincipal, cardId: Long? = null): ExercisesDto {
         requireEnabled()
-        val fromMistakes = mistakes.topExcept("aussprache", 20).mapNotNull { m ->
+        val fromMistakes = mistakes.topExcept(user.id, "aussprache", 20).mapNotNull { m ->
             val text = Exercises.corrected(m.example, m.wrong, m.right)?.takeIf { it.isNotBlank() && it.length <= MAX_REFERENCE }
                 ?: m.right.takeIf { it.isNotBlank() && it.length <= MAX_REFERENCE }
             text?.let { Exercise("mistake-${m.id}", "mistake", it.trim(), m.rule) }
         }.take(5)
-        val wanted = cardId?.let { vocab.find(it) }
-        val fromVocab = (listOfNotNull(wanted) + vocab.forPronunciation(today(), 5).filter { it.id != wanted?.id })
+        val wanted = cardId?.let { vocab.find(user.id, it) }
+        val fromVocab = (listOfNotNull(wanted) + vocab.forPronunciation(user.id, today(), 5).filter { it.id != wanted?.id })
             .filter { it.example.trim().length <= MAX_REFERENCE }
             .map { Exercise("card-${it.id}", "vocab", it.example.trim(), "${it.article} ${it.word}".trim()) }
-        return ExercisesDto(true, quota(), ExerciseGroups(fromMistakes, fromVocab, Exercises.SOUNDS))
+        return ExercisesDto(true, quota(user), ExerciseGroups(fromMistakes, fromVocab, Exercises.SOUNDS))
     }
 
-    suspend fun speak(rawText: String, slow: Boolean): Audio {
+    suspend fun speak(user: UserPrincipal, rawText: String, slow: Boolean): Audio {
         requireEnabled()
         val text = reference(rawText)
-        if (!usage.tryCountTurn(today(), config.turnsPerDay))
-            throw tooMany("Tageslimit erreicht (${config.turnsPerDay} Runden). Morgen geht's weiter.")
+        val limit = user.limits(config).turnsPerDay
+        val counted = usage.tryCountTurn(user.id, today(), limit, config.totalTurnsPerDay)
+        if (counted != LimitCount.OK) throw turnLimit(counted, limit)
         return try { metrics.timed("voice") { voice.speak(text, slow) } } catch (e: UpstreamException) { throw e.toApiException() }
     }
 
-    suspend fun assess(rawText: String?, audio: Audio?): AssessResponse {
+    suspend fun assess(user: UserPrincipal, rawText: String?, audio: Audio?): AssessResponse {
         val scorer = requireEnabled()
         val text = reference(rawText)
         if (audio == null) throw badRequest("Bitte nimm den Satz auf.")
@@ -111,7 +118,7 @@ class PronunciationService(
 
         val today = today()
         val monthStart = today.withDayOfMonth(1)
-        when (usage.tryCountAzure(today, monthStart, seconds, config.azureSecondsPerMonth, config.pronunciationsPerDay)) {
+        when (usage.tryCountAzure(user.id, today, monthStart, seconds, config.azureSecondsPerMonth, user.limits(config).pronunciationsPerDay)) {
             AzureCount.MONTH -> { metrics.pronunciation("quota"); throw tooMany(MONTH_TEXT) }
             AzureCount.DAY -> { metrics.pronunciation("limit"); throw tooMany("Tageslimit für Aussprache erreicht. Morgen geht's weiter.") }
             AzureCount.OK -> refreshGauge()
@@ -133,11 +140,11 @@ class PronunciationService(
         val weak = weakWords(assessment)
         val now = clock.instant()
         weak.forEach { (word, rule) ->
-            mistakes.record(NewMistake("aussprache", word, word, rule, text), now)
+            mistakes.record(user.id, NewMistake("aussprache", word, word, rule, text), now)
             metrics.mistake("aussprache")
         }
         metrics.pronunciation("ok")
-        return AssessResponse(assessment, quota(), weak.map { it.first })
+        return AssessResponse(assessment, quota(user), weak.map { it.first })
     }
 
     /** Validates the format first (so hostile header values never reach the duration maths), then the duration; whole seconds, rounded up. */

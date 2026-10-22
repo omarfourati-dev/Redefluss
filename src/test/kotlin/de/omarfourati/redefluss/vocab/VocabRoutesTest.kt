@@ -1,5 +1,8 @@
 package de.omarfourati.redefluss.vocab
 
+import de.omarfourati.redefluss.OWNER
+import de.omarfourati.redefluss.OWNER_PRINCIPAL
+
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.MistakeRepo
 import de.omarfourati.redefluss.speech.*
@@ -170,7 +173,7 @@ class VocabRoutesTest {
         val (c, token) = login()
         val id = c.today(token).body<JsonObject>().cards().idOf("Kündigungsfrist")
         c.review(token, id, text = "Meine Kündigungsfrist ist lang.")
-        val m = MistakeRepo(TestDb.db).top(5).single()
+        val m = MistakeRepo(TestDb.db).top(OWNER, 5).single()
         assertEquals("ist lang", m.wrong)
         assertEquals("Meine Kündigungsfrist ist lang.", m.example)
     }

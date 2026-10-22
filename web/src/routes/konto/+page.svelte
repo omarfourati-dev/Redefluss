@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { api } from '#lib/api';
 	import { auth } from '#lib/auth.svelte';
+	import Invitations from '../../lib/components/Invitations.svelte';
 
 	let current = $state('');
 	let next = $state('');
@@ -8,6 +10,14 @@
 	let error = $state('');
 	let done = $state(false);
 	let busy = $state(false);
+
+	onMount(() => {
+		// sessions from before guest accounts existed do not know their role yet
+		if (auth.role === null)
+			api<{ role: string }>('/api/auth/me')
+				.then((me) => auth.setRole(me.role))
+				.catch(() => undefined);
+	});
 
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -19,11 +29,11 @@
 		}
 		busy = true;
 		try {
-			const res = await api<{ token: string; email: string }>('/api/auth/password', {
+			const res = await api<{ token: string; email: string; role: string }>('/api/auth/password', {
 				method: 'POST',
 				json: { current, next }
 			});
-			auth.set(res.token, res.email);
+			auth.set(res.token, res.email, res.role);
 			done = true;
 			current = next = repeat = '';
 		} catch (err) {
@@ -73,3 +83,4 @@
 	{#if done}<p class="text-sm text-emerald-700">Passwort geändert.</p>{/if}
 	<button class="btn-primary" type="submit" disabled={busy}>Passwort ändern</button>
 </form>
+{#if auth.role === 'owner'}<Invitations />{/if}

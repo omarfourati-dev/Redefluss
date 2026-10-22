@@ -13,7 +13,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data class LoginRequest(val email: String, val password: String)
 @Serializable data class PasswordRequest(val current: String, val next: String)
-@Serializable data class MeResponse(val email: String)
+@Serializable data class MeResponse(val email: String, val role: String)
 
 fun Application.installAuth(auth: AuthService) {
     install(Authentication) {
@@ -35,7 +35,10 @@ fun Route.authRoutes(auth: AuthService) {
         call.respond(auth.login(req.email, req.password, call.request.origin.remoteHost))
     }
     authenticate("auth") {
-        get("/api/auth/me") { call.respond(MeResponse(call.principal<UserPrincipal>()!!.email)) }
+        get("/api/auth/me") {
+            val user = call.principal<UserPrincipal>()!!
+            call.respond(MeResponse(user.email, user.role.db))
+        }
         post("/api/auth/password") {
             val req = call.receive<PasswordRequest>()
             call.respond(auth.changePassword(call.principal<UserPrincipal>()!!.id, req.current, req.next))

@@ -12,11 +12,11 @@
 		busy = true;
 		error = '';
 		try {
-			const res = await api<{ token: string; email: string }>('/api/auth/login', {
+			const res = await api<{ token: string; email: string; role: string }>('/api/auth/login', {
 				method: 'POST',
 				json: { email, password }
 			});
-			auth.set(res.token, res.email);
+			auth.set(res.token, res.email, res.role);
 			void deps.goto('/');
 		} catch (err) {
 			error = (err as Error).message;
