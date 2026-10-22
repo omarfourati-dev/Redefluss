@@ -12,6 +12,8 @@ import de.omarfourati.redefluss.http.StaticFiles
 import de.omarfourati.redefluss.http.installHttpBasics
 import de.omarfourati.redefluss.http.respondProblem
 import de.omarfourati.redefluss.http.spa
+import de.omarfourati.redefluss.invite.InvitationService
+import de.omarfourati.redefluss.invite.invitationRoutes
 import de.omarfourati.redefluss.interview.LiveService
 import de.omarfourati.redefluss.interview.liveRoutes
 import de.omarfourati.redefluss.metrics.Metrics
@@ -43,6 +45,7 @@ class Deps(
     val vocab: VocabService,
     val pronunciation: PronunciationService,
     val live: LiveService,
+    val invitations: InvitationService,
 )
 
 fun Application.redefluss(deps: Deps) {
@@ -71,6 +74,7 @@ fun Application.redefluss(deps: Deps) {
         vocabRoutes(deps.vocab)
         pronunciationRoutes(deps.pronunciation)
         liveRoutes(deps.live)
+        invitationRoutes(deps.invitations)
         route("/api") {
             handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") }
             route("{...}") { handle { call.respondProblem(HttpStatusCode.NotFound, "Not Found") } }

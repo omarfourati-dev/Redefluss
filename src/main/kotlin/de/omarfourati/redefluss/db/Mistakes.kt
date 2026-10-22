@@ -16,34 +16,36 @@ private fun ResultSet.toMistake() = Mistake(getLong("id"), getString("category")
     getString("rule"), getString("example"), getInt("count"), instant("last_seen"), getBoolean("resolved"))
 private fun ResultSet.all(): List<Mistake> = buildList { while (next()) add(toMistake()) }
 
+/** Every query is scoped to one account (userId): nobody ever sees another account's mistakes. */
 class MistakeRepo(private val db: Db) {
     /** Same normalized mistake → count + 1, newest wording/rule/example, re-opened. */
-    suspend fun record(m: NewMistake, now: Instant): Long = db.tx {
+    suspend fun record(userId: Long, m: NewMistake, now: Instant): Long = db.tx {
         val category = MistakeKey.category(m.category)
         sql("""
-            INSERT INTO mistake (category, wrong, correct, rule, example, normalized, first_seen, last_seen)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (normalized) DO UPDATE SET count = mistake.count + 1, wrong = EXCLUDED.wrong,
+            INSERT INTO mistake (user_id, category, wrong, correct, rule, example, normalized, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (user_id, normalized) DO UPDATE SET count = mistake.count + 1, wrong = EXCLUDED.wrong,
               correct = EXCLUDED.correct, rule = EXCLUDED.rule, example = EXCLUDED.example,
               last_seen = EXCLUDED.last_seen, resolved = false
             RETURNING id
-        """.trimIndent(), category, m.wrong.trim(), m.right.trim(), m.rule.trim(), m.example.take(300),
+        """.trimIndent(), userId, category, m.wrong.trim(), m.right.trim(), m.rule.trim(), m.example.take(300),
             MistakeKey.normalize(category, m.wrong, m.right), now, now) { rs -> rs.next(); rs.getLong(1) }
     }
 
-    suspend fun top(limit: Int): List<Mistake> = db.tx {
-        sql("SELECT $COLUMNS FROM mistake WHERE NOT resolved ORDER BY count DESC, last_seen DESC LIMIT ?", limit) { it.all() }
+    suspend fun top(userId: Long, limit: Int): List<Mistake> = db.tx {
+        sql("SELECT $COLUMNS FROM mistake WHERE user_id = ? AND NOT resolved ORDER BY count DESC, last_seen DESC LIMIT ?", userId, limit) { it.all() }
     }
 
-    suspend fun topExcept(category: String, limit: Int): List<Mistake> = db.tx {
-        sql("SELECT $COLUMNS FROM mistake WHERE NOT resolved AND category <> ? ORDER BY count DESC, last_seen DESC LIMIT ?", category, limit) { it.all() }
+    suspend fun topExcept(userId: Long, category: String, limit: Int): List<Mistake> = db.tx {
+        sql("SELECT $COLUMNS FROM mistake WHERE user_id = ? AND NOT resolved AND category <> ? ORDER BY count DESC, last_seen DESC LIMIT ?",
+            userId, category, limit) { it.all() }
     }
 
-    suspend fun list(status: MistakeStatus, limit: Int = 200): List<Mistake> = db.tx {
-        val where = when (status) { MistakeStatus.OPEN -> "WHERE NOT resolved"; MistakeStatus.RESOLVED -> "WHERE resolved"; MistakeStatus.ALL -> "" }
-        sql("SELECT $COLUMNS FROM mistake $where ORDER BY count DESC, last_seen DESC LIMIT ?", limit) { it.all() }
+    suspend fun list(userId: Long, status: MistakeStatus, limit: Int = 200): List<Mistake> = db.tx {
+        val where = when (status) { MistakeStatus.OPEN -> "AND NOT resolved"; MistakeStatus.RESOLVED -> "AND resolved"; MistakeStatus.ALL -> "" }
+        sql("SELECT $COLUMNS FROM mistake WHERE user_id = ? $where ORDER BY count DESC, last_seen DESC LIMIT ?", userId, limit) { it.all() }
     }
 
-    suspend fun setResolved(id: Long, resolved: Boolean): Boolean =
-        db.tx { update("UPDATE mistake SET resolved = ? WHERE id = ?", resolved, id) == 1 }
+    suspend fun setResolved(userId: Long, id: Long, resolved: Boolean): Boolean =
+        db.tx { update("UPDATE mistake SET resolved = ? WHERE id = ? AND user_id = ?", resolved, id, userId) == 1 }
 }

@@ -10,10 +10,11 @@
 	let pwaStarted = false;
 
 	let { children } = $props();
-	const isLogin = $derived(page.url.pathname === '/login');
+	// pages reachable without an account: the login and the invitation link
+	const isPublic = $derived(page.url.pathname === '/login' || page.url.pathname === '/einladung');
 
 	$effect(() => {
-		if (!auth.token && !isLogin) void goto('/login');
+		if (!auth.token && !isPublic) void goto('/login');
 	});
 
 	$effect(() => {
@@ -57,7 +58,7 @@
 		>
 	</p>
 {/if}
-{#if isLogin}
+{#if isPublic}
 	{@render children()}
 {:else if auth.token}
 	<header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

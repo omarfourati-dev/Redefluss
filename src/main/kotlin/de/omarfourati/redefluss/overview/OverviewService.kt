@@ -1,5 +1,6 @@
 package de.omarfourati.redefluss.overview
 
+import de.omarfourati.redefluss.auth.UserPrincipal
 import de.omarfourati.redefluss.config.Config
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.http.ApiException
@@ -23,29 +24,33 @@ class OverviewService(
     private val vocab: VocabRepo, private val config: Config, private val clock: Clock,
     private val pronunciationEnabled: Boolean,
 ) {
-    suspend fun overview(): OverviewDto {
+    suspend fun overview(user: UserPrincipal): OverviewDto {
         val today = LocalDate.now(clock)
         val start = today.atStartOfDay(clock.zone).toInstant()
         val end = today.plusDays(1).atStartOfDay(clock.zone).toInstant()
-        val turns = usage.turnsOn(today)
+        val turns = usage.turnsOn(user.id, today)
+        val limits = user.limits(config)
         return OverviewDto(
-            streakDays = Streak.days(usage.activeDaysSince(today.minusDays(400)), today),
-            minutesToday = sessions.minutesBetween(start, end),
+            streakDays = Streak.days(usage.activeDaysSince(user.id, today.minusDays(400)), today),
+            minutesToday = sessions.minutesBetween(user.id, start, end),
             turnsToday = turns,
-            turnsLeft = (config.turnsPerDay - turns).coerceAtLeast(0),
-            topMistakes = mistakes.top(5).map { it.dto() },
-            vocabDue = vocab.dueCount(today),
+            turnsLeft = (limits.turnsPerDay - turns).coerceAtLeast(0),
+            topMistakes = mistakes.top(user.id, 5).map { it.dto() },
+            vocabDue = vocab.dueCount(user.id, today),
             azureSecondsLeft = today.withDayOfMonth(1).let { month ->
                 (config.azureSecondsPerMonth - usage.azureSecondsBetween(month, month.plusMonths(1))).coerceAtLeast(0)
             },
             pronunciationEnabled = pronunciationEnabled,
-            liveMinutesLeft = (config.liveMinutesPerDay * 60 - usage.liveSecondsOn(today)).coerceAtLeast(0) / 60,
+            liveMinutesLeft = minOf(
+                limits.liveMinutesPerDay * 60 - usage.liveSecondsOn(user.id, today),
+                config.totalLiveMinutesPerDay * 60 - usage.totalLiveSecondsOn(today),
+            ).coerceAtLeast(0) / 60,
         )
     }
 
-    suspend fun mistakes(status: MistakeStatus) = mistakes.list(status).map { it.dto() }
+    suspend fun mistakes(user: UserPrincipal, status: MistakeStatus) = mistakes.list(user.id, status).map { it.dto() }
 
-    suspend fun resolve(id: Long, resolved: Boolean) {
-        if (!mistakes.setResolved(id, resolved)) throw ApiException(HttpStatusCode.NotFound, "Not Found", "Diesen Fehler gibt es nicht.")
+    suspend fun resolve(user: UserPrincipal, id: Long, resolved: Boolean) {
+        if (!mistakes.setResolved(user.id, id, resolved)) throw ApiException(HttpStatusCode.NotFound, "Not Found", "Diesen Fehler gibt es nicht.")
     }
 }

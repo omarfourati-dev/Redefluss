@@ -1,5 +1,8 @@
 package de.omarfourati.redefluss.overview
 
+import de.omarfourati.redefluss.OWNER
+import de.omarfourati.redefluss.OWNER_PRINCIPAL
+
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.*
 import io.ktor.client.call.*
@@ -23,21 +26,21 @@ class OverviewRoutesTest {
             deps.auth.bootstrapOwner("omar@example.de", pw, reset = false)
             val today = LocalDate.now(TEST_CLOCK)
             val usage = UsageRepo(db)
-            usage.tryCountTurn(today, 10); usage.tryCountTurn(today, 10)
-            usage.tryReserveLive(today, 630, 1800)                                   // 1170 s left → 19 whole minutes
-            usage.tryCountTurn(today.minusDays(1), 10)
-            usage.tryCountTurn(today.minusDays(3), 10)
-            usage.tryCountAzure(today, today.withDayOfMonth(1), 200, 16200, 100)
-            usage.tryCountAzure(today.withDayOfMonth(1).minusDays(1), today.withDayOfMonth(1).minusMonths(1), 999, 16200, 100) // last month
+            usage.tryCountTurn(OWNER, today, 10, 100_000); usage.tryCountTurn(OWNER, today, 10, 100_000)
+            usage.tryReserveLive(OWNER, today, 630, 1800, 100_000)                                   // 1170 s left → 19 whole minutes
+            usage.tryCountTurn(OWNER, today.minusDays(1), 10, 100_000)
+            usage.tryCountTurn(OWNER, today.minusDays(3), 10, 100_000)
+            usage.tryCountAzure(OWNER, today, today.withDayOfMonth(1), 200, 16200, 100)
+            usage.tryCountAzure(OWNER, today.withDayOfMonth(1).minusDays(1), today.withDayOfMonth(1).minusMonths(1), 999, 16200, 100) // last month
             val sessions = SessionRepo(db)
-            val s = sessions.create("conversation", "Arbeit", TEST_CLOCK.instant().minusSeconds(600))
-            sessions.touch(s, TEST_CLOCK.instant().minusSeconds(60), 1)            // 9 minutes today
+            val s = sessions.create(OWNER, "conversation", "Arbeit", TEST_CLOCK.instant().minusSeconds(600))
+            sessions.touch(OWNER, s, TEST_CLOCK.instant().minusSeconds(60), 1)            // 9 minutes today
             val mistakes = MistakeRepo(db)
-            repeat(3) { mistakes.record(NewMistake("artikel", "den ganzen Zeit", "die ganze Zeit", "r", "e"), TEST_CLOCK.instant()) }
-            mistakes.record(NewMistake("konjugation", "du muss", "du musst", "r", "e"), TEST_CLOCK.instant())
+            repeat(3) { mistakes.record(OWNER, NewMistake("artikel", "den ganzen Zeit", "die ganze Zeit", "r", "e"), TEST_CLOCK.instant()) }
+            mistakes.record(OWNER, NewMistake("konjugation", "du muss", "du musst", "r", "e"), TEST_CLOCK.instant())
             val vocab = de.omarfourati.redefluss.vocab.VocabRepo(db)
-            vocab.insertIfNew(de.omarfourati.redefluss.vocab.NewCard("Termin", "der", "die Termine", "m", "e", "alltag", "daily"), today)
-            vocab.insertIfNew(de.omarfourati.redefluss.vocab.NewCard("Frist", "die", "die Fristen", "m", "e", "it", "daily"), today.plusDays(1))
+            vocab.insertIfNew(OWNER, de.omarfourati.redefluss.vocab.NewCard("Termin", "der", "die Termine", "m", "e", "alltag", "daily"), today)
+            vocab.insertIfNew(OWNER, de.omarfourati.redefluss.vocab.NewCard("Frist", "die", "die Fristen", "m", "e", "it", "daily"), today.plusDays(1))
         }
         application { redefluss(deps) }
         val c = createClient { install(ContentNegotiation) { json() } }

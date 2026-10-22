@@ -1,5 +1,9 @@
 package de.omarfourati.redefluss.auth
 
+import de.omarfourati.redefluss.config.Config
+import de.omarfourati.redefluss.config.Limits
+import de.omarfourati.redefluss.db.Role
+import de.omarfourati.redefluss.db.User
 import de.omarfourati.redefluss.db.UserRepo
 import de.omarfourati.redefluss.http.ApiException
 import de.omarfourati.redefluss.http.badRequest
@@ -9,8 +13,15 @@ import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 import java.time.Clock
 
-@Serializable data class LoginResponse(val token: String, val email: String)
-data class UserPrincipal(val id: Long, val email: String)
+@Serializable data class LoginResponse(val token: String, val email: String, val role: String = "owner")
+
+/** The signed-in account. Every service call is scoped to [id]; [role] decides the limits and who may invite. */
+data class UserPrincipal(val id: Long, val email: String, val role: Role = Role.OWNER) {
+    val isOwner: Boolean get() = role == Role.OWNER
+    fun limits(config: Config): Limits = if (isOwner) config.ownerLimits else config.guestLimits
+}
+
+fun User.loginResponse(tokens: Tokens) = LoginResponse(tokens.issue(this), email, role.db)
 
 class AuthService(
     private val users: UserRepo, val tokens: Tokens, private val throttle: LoginThrottle,
@@ -31,7 +42,7 @@ class AuthService(
         }
         throttle.success(mail, ip)
         metrics.login("ok")
-        return LoginResponse(tokens.issue(user), user.email)
+        return user.loginResponse(tokens)
     }
 
     suspend fun changePassword(id: Long, current: String, next: String): LoginResponse {
@@ -44,7 +55,7 @@ class AuthService(
         throttle.clearKey(key)
         Passwords.problem(next)?.let { throw badRequest(it) }
         val updated = users.setPassword(id, Passwords.hash(next))
-        return LoginResponse(tokens.issue(updated), updated.email)
+        return updated.loginResponse(tokens)
     }
 
     /** The single account comes from OWNER_EMAIL/OWNER_PASSWORD; a password changed in the app is kept unless reset=true. */
@@ -54,13 +65,13 @@ class AuthService(
         when {
             existing == null && users.count() > 0 ->
                 LoggerFactory.getLogger("redefluss").warn("OWNER_EMAIL differs from the existing account; keeping the existing single account unchanged")
-            existing == null -> users.create(email, Passwords.hash(password), clock.instant())
+            existing == null -> users.create(email, Passwords.hash(password), clock.instant(), Role.OWNER)
             reset && !Passwords.verify(password, existing.passwordHash) -> users.setPassword(existing.id, Passwords.hash(password))
         }
     }
 
     suspend fun principalFor(userId: Long, tokenVersion: Int): UserPrincipal? =
-        users.findById(userId)?.takeIf { it.tokenVersion == tokenVersion }?.let { UserPrincipal(it.id, it.email) }
+        users.findById(userId)?.takeIf { it.tokenVersion == tokenVersion }?.let { UserPrincipal(it.id, it.email, it.role) }
 
     private companion object { val DUMMY_HASH: String = Passwords.hash("dummy-password-for-timing") }
 }

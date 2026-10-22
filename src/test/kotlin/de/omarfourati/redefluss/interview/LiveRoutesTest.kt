@@ -1,5 +1,8 @@
 package de.omarfourati.redefluss.interview
 
+import de.omarfourati.redefluss.OWNER
+import de.omarfourati.redefluss.OWNER_PRINCIPAL
+
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.*
 import de.omarfourati.redefluss.http.ApiException
@@ -85,7 +88,7 @@ class LiveRoutesTest {
         runBlocking { db.tx { sql("SELECT summary FROM practice_session WHERE id = ?", UUID.fromString(id)) { it.next(); it.getString(1) } } }
 
     private suspend fun HttpResponse.detail() = body<JsonObject>()["detail"]!!.jsonPrimitive.content
-    private fun live() = runBlocking { usage.liveSecondsOn(today) }
+    private fun live() = runBlocking { usage.liveSecondsOn(OWNER, today) }
 
     @Test fun fakeStartReservesAndCreatesInterviewSession() = testApplication {
         val deps = setup()
@@ -116,7 +119,7 @@ class LiveRoutesTest {
         val lines = mutableListOf<String>()
         val spy = SpyRealtime(secret = ClientSecret("ek_geheim123", 1_900_000_000))
         val deps = setup(spy, lines)
-        runBlocking { MistakeRepo(db).record(NewMistake("konjugation", "du muss", "du musst", "r", "Du muss."), TEST_CLOCK.instant()) }
+        runBlocking { MistakeRepo(db).record(OWNER, NewMistake("konjugation", "du muss", "du musst", "r", "Du muss."), TEST_CLOCK.instant()) }
         application { redefluss(deps) }
         val (c, token) = login()
         val body = c.start(token, role = "teamlead", minutes = 20).body<JsonObject>()
@@ -240,7 +243,7 @@ class LiveRoutesTest {
         application { redefluss(deps) }
         val (c, token) = login()
         assertEquals(HttpStatusCode.NotFound, c.cancel(token, UUID.randomUUID().toString()).status)
-        val conversation = runBlocking { SessionRepo(db).create("conversation", "Arbeit", TEST_CLOCK.instant()) }
+        val conversation = runBlocking { SessionRepo(db).create(OWNER, "conversation", "Arbeit", TEST_CLOCK.instant()) }
         assertEquals(HttpStatusCode.NotFound, c.cancel(token, conversation.toString()).status)
         assertEquals(HttpStatusCode.BadRequest, c.cancel(token, "kein-uuid").status)
     }
@@ -248,8 +251,8 @@ class LiveRoutesTest {
     @Test fun cancelAfterRestartRefundsNothing() = testApplication {
         val deps = setup()
         val id = runBlocking {
-            usage.tryReserveLive(today, 600, 1800)
-            SessionRepo(db).create("interview", "Alt", TEST_CLOCK.instant())
+            usage.tryReserveLive(OWNER, today, 600, 1800, 100_000)
+            SessionRepo(db).create(OWNER, "interview", "Alt", TEST_CLOCK.instant())
         }
         application { redefluss(deps) }
         val (c, token) = login()
@@ -260,8 +263,8 @@ class LiveRoutesTest {
     @Test fun cacheKeepsAtMostTwentySessions() = runBlocking {
         val deps = setup(FakeRealtime(), mutableListOf(), "LIVE_MINUTES_PER_DAY" to "120")
         val ids = (1..21).map {
-            if (it % 12 == 0) usage.settleLive(today, 7200)
-            UUID.fromString(deps.live.start(StartRequest(jobAd, "mix", 10)).sessionId)
+            if (it % 12 == 0) usage.settleLive(OWNER, today, 7200)
+            UUID.fromString(deps.live.start(OWNER_PRINCIPAL, StartRequest(jobAd, "mix", 10)).sessionId)
         }
         assertNull(deps.live.session(ids.first()))
         assertNotNull(deps.live.session(ids.last()))
@@ -293,7 +296,7 @@ class LiveRoutesTest {
         assertEquals("du muss", body["corrections"]!!.jsonArray.single().jsonObject["wrong"]!!.jsonPrimitive.content)
         assertEquals(300, live())   // 5 of the 10 reserved minutes used, the rest given back
         assertEquals(overall, summaryOf(id))
-        val m = runBlocking { MistakeRepo(db).list(MistakeStatus.ALL) }.single()
+        val m = runBlocking { MistakeRepo(db).list(OWNER, MistakeStatus.ALL) }.single()
         assertEquals("du muss" to "du musst", m.wrong to m.right)
         assertEquals("konjugation", m.category)
         assertEquals("Ich bin Full-Stack-Entwickler und du muss wissen, dass ich gern im Team arbeite.", m.example)
@@ -471,14 +474,14 @@ class LiveRoutesTest {
         application { redefluss(deps) }
         val (c, token) = login()
         assertEquals(HttpStatusCode.NotFound, c.report(token, UUID.randomUUID().toString()).status)
-        val conversation = runBlocking { SessionRepo(db).create("conversation", "Arbeit", TEST_CLOCK.instant()) }
+        val conversation = runBlocking { SessionRepo(db).create(OWNER, "conversation", "Arbeit", TEST_CLOCK.instant()) }
         assertEquals(HttpStatusCode.NotFound, c.report(token, conversation.toString()).status)
         // After a restart the job ad is gone: no report, the reservation stays.
         val (lost, cancelled) = runBlocking {
-            usage.tryReserveLive(today, 600, 1800)
+            usage.tryReserveLive(OWNER, today, 600, 1800, 100_000)
             val repo = SessionRepo(db)
-            val a = repo.create("interview", "Alt", TEST_CLOCK.instant())
-            val b = repo.create("interview", "Alt", TEST_CLOCK.instant()).also { repo.markCancelled(it) }
+            val a = repo.create(OWNER, "interview", "Alt", TEST_CLOCK.instant())
+            val b = repo.create(OWNER, "interview", "Alt", TEST_CLOCK.instant()).also { repo.markCancelled(OWNER, it) }
             a to b
         }
         val res = c.report(token, lost.toString())
@@ -497,7 +500,7 @@ class LiveRoutesTest {
         val id = c.startId(token)
         val long = listOf(entry("interviewer", "Frage?"), entry("omar", "a".repeat(250)), entry("interviewer", "Und?"), entry("omar", "b".repeat(250)))
         assertEquals(HttpStatusCode.OK, c.report(token, id, transcript = long).status)
-        val m = runBlocking { MistakeRepo(db).list(MistakeStatus.ALL) }.single()
+        val m = runBlocking { MistakeRepo(db).list(OWNER, MistakeStatus.ALL) }.single()
         assertEquals(("a".repeat(250) + " " + "b".repeat(250)).take(300), m.example)
         assertEquals("Gut.", summaryOf(id))
     }
@@ -535,7 +538,7 @@ class LiveRoutesTest {
         assertEquals(240, live())
         assertEquals(2, spy.calls.size)
         assertEquals(res.body<JsonObject>()["overall"]!!.jsonPrimitive.content, summaryOf(id))
-        val m = runBlocking { MistakeRepo(db).list(MistakeStatus.ALL) }.single()
+        val m = runBlocking { MistakeRepo(db).list(OWNER, MistakeStatus.ALL) }.single()
         assertEquals(1, m.count)
         assertTrue(Regex("""redefluss_live_seconds_total(\{[^}]*\})? 240\.0""").containsMatchIn(deps.metrics.scrape()))
         val again = c.report(token, id)
@@ -566,18 +569,18 @@ class LiveRoutesTest {
             }
         }
         val deps = setup(reporter = gated)
-        val id = UUID.fromString(deps.live.start(StartRequest(jobAd, "recruiter", 10)).sessionId)
+        val id = UUID.fromString(deps.live.start(OWNER_PRINCIPAL, StartRequest(jobAd, "recruiter", 10)).sessionId)
         val transcript = listOf(TranscriptEntry("interviewer", "Frage?"), TranscriptEntry("omar", "Antwort."))
-        val first = async(Dispatchers.Default) { deps.live.report(id, 120, transcript) }
+        val first = async(Dispatchers.Default) { deps.live.report(OWNER_PRINCIPAL, id, 120, transcript) }
         entered.await()
-        val busy = assertFailsWith<ApiException> { deps.live.report(id, 300, transcript) }
+        val busy = assertFailsWith<ApiException> { deps.live.report(OWNER_PRINCIPAL, id, 300, transcript) }
         assertEquals(HttpStatusCode.Conflict, busy.status)
         assertEquals("Der Bericht wird gerade erstellt.", busy.detail)
         release.complete(Unit)
         assertTrue(first.await().overall.isNotBlank())
         assertEquals(1, calls)
         assertEquals(120, live())
-        assertEquals("Dieses Gespräch ist schon ausgewertet.", assertFailsWith<ApiException> { deps.live.report(id, 300, transcript) }.detail)
+        assertEquals("Dieses Gespräch ist schon ausgewertet.", assertFailsWith<ApiException> { deps.live.report(OWNER_PRINCIPAL, id, 300, transcript) }.detail)
     }
 
     @Test fun reportWithoutSecondsIs400() = testApplication {

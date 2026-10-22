@@ -1,5 +1,6 @@
 package de.omarfourati.redefluss.interview
 
+import de.omarfourati.redefluss.auth.UserPrincipal
 import de.omarfourati.redefluss.http.badRequest
 import io.ktor.http.*
 import io.ktor.server.auth.*
@@ -16,19 +17,19 @@ fun Route.liveRoutes(service: LiveService) {
     authenticate("auth") {
         post("/api/live/session") {
             val req = runCatching { call.receive<StartRequest>() }.getOrElse { throw badRequest("Die Anfrage ist ungültig.") }
-            val response = service.start(req)
+            val response = service.start(call.principal<UserPrincipal>()!!, req)
             call.respondText(StartJson.encodeToString(StartResponse.serializer(), response), ContentType.Application.Json)
         }
         post("/api/live/cancel") {
             val req = runCatching { call.receive<CancelRequest>() }.getOrElse { throw badRequest("Die Anfrage ist ungültig.") }
             val id = runCatching { UUID.fromString(req.sessionId) }.getOrNull() ?: throw badRequest("sessionId fehlt oder ist ungültig.")
-            service.cancel(id)
+            service.cancel(call.principal<UserPrincipal>()!!, id)
             call.respond(HttpStatusCode.NoContent)
         }
         post("/api/live/report") {
             val req = runCatching { call.receive<ReportRequest>() }.getOrElse { throw badRequest("Die Anfrage ist ungültig.") }
             val id = runCatching { UUID.fromString(req.sessionId) }.getOrNull() ?: throw badRequest("sessionId fehlt oder ist ungültig.")
-            call.respond(service.report(id, req.seconds, req.transcript))
+            call.respond(service.report(call.principal<UserPrincipal>()!!, id, req.seconds, req.transcript))
         }
     }
 }

@@ -102,4 +102,19 @@ class ConfigTest {
         assertEquals(0, Config.from(base + ("LIVE_MINUTES_PER_DAY" to "-3")).liveMinutesPerDay)
         assertFailsWith<ConfigException> { Config.from(base + ("LIVE_MINUTES_PER_DAY" to "dreißig")) }
     }
+
+    @Test fun guestAndTotalLimits() {
+        val c = Config.from(base)
+        assertEquals(Limits(300, 30, 100, 60), c.ownerLimits)
+        assertEquals(Limits(100, 15, 30, 30), c.guestLimits)
+        assertEquals(500, c.totalTurnsPerDay)
+        assertEquals(60, c.totalLiveMinutesPerDay)
+        val o = Config.from(base + mapOf("GUEST_TURNS_PER_DAY" to "20", "GUEST_LIVE_MINUTES_PER_DAY" to "999",
+            "GUEST_PRONUNCIATIONS_PER_DAY" to "-1", "GUEST_VOCAB_REVIEWS_PER_DAY" to "7",
+            "TOTAL_TURNS_PER_DAY" to "800", "TOTAL_LIVE_MINUTES_PER_DAY" to "9999"))
+        assertEquals(Limits(20, 120, 0, 7), o.guestLimits)
+        assertEquals(800, o.totalTurnsPerDay)
+        assertEquals(480, o.totalLiveMinutesPerDay)
+        assertFailsWith<ConfigException> { Config.from(base + ("GUEST_TURNS_PER_DAY" to "viele")) }
+    }
 }

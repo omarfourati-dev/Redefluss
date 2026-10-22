@@ -18,6 +18,22 @@ describe('auth', () => {
 		expect(localStorage.getItem('redefluss.token')).toBeNull();
 	});
 
+	it('persists the role and ignores unknown values', async () => {
+		const { auth } = await import('./auth.svelte');
+		auth.set('tok', 'gast@example.de', 'guest');
+		expect(localStorage.getItem('redefluss.role')).toBe('guest');
+		vi.resetModules();
+		expect((await import('./auth.svelte')).auth.role).toBe('guest');
+		auth.set('tok2', 'gast@example.de'); // a token refresh without role keeps the known one
+		expect(auth.role).toBe('guest');
+		auth.setRole('admin');
+		expect(auth.role).toBeNull();
+		auth.setRole('owner');
+		auth.clear();
+		expect(auth.role).toBeNull();
+		expect(localStorage.getItem('redefluss.role')).toBeNull();
+	});
+
 	it('works when storage throws (private mode)', async () => {
 		vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
 			throw new Error('blocked');

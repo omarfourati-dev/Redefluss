@@ -5,7 +5,7 @@ korrigiert und beantwortet, die Antwort wird vorgelesen. Wiederkehrende Fehler l
 in die nächsten Runden ein. **Aufnahmen werden nie gespeichert – gespeichert werden nur Fehler (mit Beispielsatz) und
 ein Tageszähler.**
 
-**Live:** https://redefluss.omarfourati.de · ein einziges Konto (der Besitzer) · installierbar als PWA.
+**Live:** https://redefluss.omarfourati.de · Konto des Besitzers plus eingeladene Gäste · installierbar als PWA.
 
 Ein Portfolio-Projekt von [Omar Fourati](https://omarfourati.de), gebaut mit **Kotlin/Ktor** und **Svelte 5**.
 Gebaut sind alle vier Etappen: Etappe 1 (Gespräch, Fehler-Gedächtnis, Übersicht), Etappe 2 (Wortschatz), Etappe 3 (Aussprache) und Etappe 4 (Vorstellungsgespräch live); „Ausblick“ fasst sie zusammen.
@@ -33,6 +33,23 @@ begrenzt – ein System-Prompt vom Client wird nie übernommen.
 
 **Limits:** 300 Runden pro Tag (`TURNS_PER_DAY`, Standard 300), danach HTTP 429. Mit `SPEECH=fake` laufen Transkription,
 Coach und Sprachausgabe ohne Schlüssel und ohne Kosten (lokal und in der CI); im Betrieb gilt `SPEECH=openai`.
+
+## Gäste per Einladungslink
+
+Es gibt keine offene Registrierung. Der Besitzer erstellt unter **Konto → Gäste einladen** einen Link für eine
+E-Mail-Adresse und schickt ihn selbst (Redefluss verschickt keine E-Mails). Der Link `/einladung#<token>` ist 7 Tage gültig
+und nur einmal nutzbar; der Token steht hinter `#` und erreicht deshalb nie Server-Logs, gespeichert wird nur sein
+SHA-256-Hash. Der Gast legt sein Passwort selbst fest (mindestens 12 Zeichen) und ist danach angemeldet. Offene
+Einladungen lassen sich zurückziehen, Gäste lassen sich entfernen – dabei werden alle ihre Daten gelöscht.
+
+- **Eigene Daten:** Fehler, Gespräche, Wörter und Tageszähler hängen am Konto (`user_id`, Migration
+  `V3__guests.sql`); niemand sieht die Daten eines anderen.
+- **Gast-Limits pro Tag:** `GUEST_TURNS_PER_DAY` (100), `GUEST_LIVE_MINUTES_PER_DAY` (15, erlaubt 0–120),
+  `GUEST_PRONUNCIATIONS_PER_DAY` (30), `GUEST_VOCAB_REVIEWS_PER_DAY` (30).
+- **Gesamt-Deckel für alle Konten:** `TOTAL_TURNS_PER_DAY` (500) und `TOTAL_LIVE_MINUTES_PER_DAY` (60, erlaubt 0–480),
+  atomar per Advisory Lock gezählt; danach HTTP 429 („Redefluss ist für heute ausgelastet …“). Das Azure-Monatskontingent
+  (`AZURE_SECONDS_PER_MONTH`) teilen sich alle Konten.
+- **Missbrauchsschutz:** höchstens 5 Versuche mit ungültigen Links pro IP in 15 Minuten (HTTP 429).
 
 ## Wortschatz
 
@@ -175,14 +192,17 @@ cd web && npm run check && npx vitest run                           # Svelte: Ty
 cd web && E2E_BASE_URL=http://localhost:8080 npx playwright test   # E2E gegen den laufenden Stack
 ```
 
-- Kotlin: Konfiguration, Passwörter, Login-Drosselung, Auth-API, Gespräch (Limit, Timeout, Upstream-Fehler), Fehler-
+- Kotlin: Konfiguration, Passwörter, Login-Drosselung, Auth-API, Einladungen und Gäste (Ablauf, Datentrennung,
+  Gast- und Gesamt-Limits, Drosselung), Gespräch (Limit, Timeout, Upstream-Fehler), Fehler-
   und Überblicks-Repositories, Serie, OpenAI-Clients gegen `MockEngine`, Fakes, Server (`/healthz`, `/metrics`,
   Header, Log), statische Dateien
-- Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto, Login, PWA, Service-Worker-Stempel
+- Svelte (Vitest): Auth, API-Client, Aufnahme, Markierung, Gespräch, Fehler, Konto (mit Gäste-Verwaltung), Einladung,
+  Login, PWA, Service-Worker-Stempel
 - Playwright (`web/e2e/redefluss.spec.ts`): Grundlagen (`robots.txt`, `/healthz`, API nur mit Login), Satz sprechen mit
   Korrektur und Übersicht, Aussprache (Satz aufnehmen, farbige Bewertung, Laute), Tippen und ignoriertes Kurz-Tippen, Wortschatz (Wörter des Tages, Wiederholung), PWA (Manifest, Service Worker, keine API-Antworten im
   Cache, Offline-Start), Vorstellungsgespräch im Testmodus (Anzeige, zwei Fragen, Bericht, weniger Live-Minuten; braucht auf einem länger laufenden
-  lokalen Stack mindestens 10 freie Live-Minuten), Abmelden
+  lokalen Stack mindestens 10 freie Live-Minuten), Gast einladen (Link, eigenes Passwort, getrennte Daten, Link nur
+  einmal nutzbar, Gast entfernen), Abmelden
 
 ## App installieren (PWA)
 
