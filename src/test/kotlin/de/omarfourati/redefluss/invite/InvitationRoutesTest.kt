@@ -3,6 +3,7 @@ package de.omarfourati.redefluss.invite
 import de.omarfourati.redefluss.*
 import de.omarfourati.redefluss.db.MistakeRepo
 import de.omarfourati.redefluss.db.NewMistake
+import de.omarfourati.redefluss.db.sql
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -205,7 +206,7 @@ class InvitationRoutesTest {
         val c = jsonClient()
         val owner = c.login("omar@example.de", pw)
         val invite = c.invite(owner, "gast@example.de").obj()["token"]!!.jsonPrimitive.content
-        val stored = runBlocking { TestDb.db.tx { de.omarfourati.redefluss.db.sql("SELECT token_hash FROM invitation") { it.next(); it.getString(1) } } }
+        val stored = runBlocking { TestDb.db.tx { sql("SELECT token_hash FROM invitation") { it.next(); it.getString(1) } } }
         assertNotEquals(invite, stored)
         assertEquals(InvitationService.hash(invite), stored)
     }
